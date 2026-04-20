@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Authentication</span>
+    <h1>Sign in with the correct role and identifier.</h1>
+    <p>Customers and booking agents use email. Airline staff use their username. Sessions are created only after server-side credential checks succeed.</p>
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Login</h2>
+        <form method="post" class="form-grid">
+            <div>
+                <label for="role">Account Type</label>
+                <select id="role" name="role">
+                    <option value="customer" {% if form_data.role == 'customer' %}selected{% endif %}>Customer</option>
+                    <option value="booking_agent" {% if form_data.role == 'booking_agent' %}selected{% endif %}>Booking Agent</option>
+                    <option value="airline_staff" {% if form_data.role == 'airline_staff' %}selected{% endif %}>Airline Staff</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="identifier" id="identifier-label">Email</label>
+                <input id="identifier" name="identifier" value="{{ form_data.identifier }}" placeholder="you@example.com" required>
+            </div>
+
+            <div>
+                <label for="password">Password</label>
+                <input id="password" type="password" name="password" required>
+            </div>
+
+            <div class="actions">
+                <button type="submit">Sign In</button>
+                <a class="button secondary" href="{{ url_for('register') }}">Register Instead</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Demo Accounts</h2>
+        <p>These sample credentials work after the database initializer is run.</p>
+        <div class="tag-row">
+            <span class="tag">Customer: alice@example.com / password123</span>
+            <span class="tag">Booking agent: agent1@travel.com / agentpass</span>
+            <span class="tag">Staff: staff_skyjet / staffpass</span>
+        </div>
+        <p class="subtle">The app can also transparently upgrade old plain-text demo passwords to hashes on successful login.</p>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const roleSelect = document.getElementById("role");
+    const identifierLabel = document.getElementById("identifier-label");
+    const identifierInput = document.getElementById("identifier");
+
+    function updateIdentifierLabel() {
+        if (roleSelect.value === "airline_staff") {
+            identifierLabel.textContent = "Username";
+            identifierInput.placeholder = "staff_username";
+        } else {
+            identifierLabel.textContent = "Email";
+            identifierInput.placeholder = "you@example.com";
+        }
+    }
+
+    roleSelect.addEventListener("change", updateIdentifierLabel);
+    updateIdentifierLabel();
+</script>
+{% endblock %}

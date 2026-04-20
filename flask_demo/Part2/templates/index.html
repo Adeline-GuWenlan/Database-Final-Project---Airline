@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Air Ticket Reservation{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Part 3 Ready</span>
+    <h1>Secure, role-based airline booking on top of the course schema.</h1>
+    <p>
+        This refinement pass adds hashed passwords, structured search inputs, session-backed role routing,
+        server-side validation, seat-class booking, customer spending views, booking-agent analytics, and staff operations.
+    </p>
+    <div class="actions">
+        <a class="button" href="{{ url_for('flights') }}">Browse Upcoming Flights</a>
+        <a class="button secondary" href="{{ url_for('status_lookup') }}">Check In-Progress Flight Status</a>
+        {% if not session.get('role') %}
+            <a class="button accent" href="{{ url_for('register') }}">Create an Account</a>
+        {% endif %}
+    </div>
+</section>
+
+<section class="grid grid-3">
+    <div class="card">
+        <h2>Security</h2>
+        <p>Passwords are hashed, protected routes require sessions, and booking actions validate authorization on the server.</p>
+    </div>
+    <div class="card">
+        <h2>Structured Queries</h2>
+        <p>Flight search and dashboards use guided fields for airports, cities, dates, and roles to reduce ambiguous input.</p>
+    </div>
+    <div class="card">
+        <h2>Seat Classes</h2>
+        <p>The anti-automation twist remains consistent: economy, business, and first-class pricing and capacity are enforced during booking.</p>
+    </div>
+</section>
+
+<section class="wide-card">
+    <div class="split">
+        <div>
+            <h2>Featured Upcoming Flights</h2>
+            <p>Public users can browse upcoming flights before signing in. Customers and authorized booking agents can continue into booking.</p>
+        </div>
+        <div class="tag-row">
+            <span class="tag">{{ airlines|length }} airlines</span>
+            <span class="tag">{{ airports|length }} airports</span>
+            <span class="tag">{{ cities|length }} cities</span>
+        </div>
+    </div>
+
+    {% if featured_flights %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Flight</th>
+                        <th>Route</th>
+                        <th>Departure</th>
+                        <th>Status</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for flight in featured_flights %}
+                        <tr>
+                            <td>
+                                <strong>{{ flight.flight_num }}</strong><br>
+                                <span class="subtle">{{ flight.airline_name }}</span>
+                            </td>
+                            <td>{{ flight.departure_airport }} ({{ flight.departure_city }}) → {{ flight.arrival_airport }} ({{ flight.arrival_city }})</td>
+                            <td>{{ flight.departure_time|datetime_display }}</td>
+                            <td><span class="status-badge status-{{ flight.status }}">{{ flight.status }}</span></td>
+                            <td>{{ flight.price|money }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty">No featured flights are available yet.</div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Booking Agent Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Booking Agent Dashboard</span>
+    <h1>Track customer purchases and commission analytics.</h1>
+    <p>Agents can book only for authorized airlines, review their sold tickets, and inspect 30-day commission metrics plus top-customer rankings.</p>
+</section>
+
+<section class="wide-card">
+    <div class="tag-row">
+        {% if session.get('authorized_airlines') %}
+            {% for airline in session.get('authorized_airlines') %}
+                <span class="tag">Authorized: {{ airline }}</span>
+            {% endfor %}
+        {% else %}
+            <span class="tag">No airline authorizations yet</span>
+        {% endif %}
+    </div>
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Sold Flight Filters</h2>
+        <form method="get" class="form-grid columns-2">
+            <div>
+                <label for="start_date">Departure Start</label>
+                <input id="start_date" type="date" name="start_date" value="{{ filters.start_date }}">
+            </div>
+            <div>
+                <label for="end_date">Departure End</label>
+                <input id="end_date" type="date" name="end_date" value="{{ filters.end_date }}">
+            </div>
+            <div>
+                <label for="departure_airport">Departure Airport</label>
+                <select id="departure_airport" name="departure_airport">
+                    <option value="">Any departure airport</option>
+                    {% for airport in airports %}
+                        <option value="{{ airport.name }}" {% if filters.departure_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="arrival_airport">Arrival Airport</label>
+                <select id="arrival_airport" name="arrival_airport">
+                    <option value="">Any arrival airport</option>
+                    {% for airport in airports %}
+                        <option value="{{ airport.name }}" {% if filters.arrival_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="actions">
+                <button type="submit">Apply Filters</button>
+                <a class="button secondary" href="{{ url_for('agent_portal') }}">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>30-Day Metrics</h2>
+        {% if analytics %}
+            <div class="metric-grid">
+                <div class="metric">
+                    <div class="metric-label">Tickets Sold</div>
+                    <div class="metric-value">{{ analytics.tickets_sold }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Total Commission</div>
+                    <div class="metric-value">{{ analytics.total_commission|money }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Average Commission</div>
+                    <div class="metric-value">{{ analytics.avg_commission|money }}</div>
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">Analytics are unavailable right now.</div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Top 5 Customers by Tickets (Last 6 Months)</h2>
+        {% if analytics and analytics.top_by_tickets %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Email</th>
+                            <th>Tickets</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in analytics.top_by_tickets %}
+                            <tr>
+                                <td>{{ row.name }}</td>
+                                <td>{{ row.customer_email }}</td>
+                                <td>{{ row.tickets_sold }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">No qualifying customer purchases were found.</div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Top 5 Customers by Commission (Last Year)</h2>
+        {% if analytics and analytics.top_by_commission %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Email</th>
+                            <th>Commission</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in analytics.top_by_commission %}
+                            <tr>
+                                <td>{{ row.name }}</td>
+                                <td>{{ row.customer_email }}</td>
+                                <td>{{ row.commission_total|money }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">No commission history was found for the last year.</div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="wide-card">
+    <div class="split">
+        <div>
+            <h2>Tickets Purchased on Behalf of Customers</h2>
+            <p>{{ purchases|length }} purchase{% if purchases|length != 1 %}s{% endif %} matched the current filters.</p>
+        </div>
+        <div class="actions">
+            <a class="button" href="{{ url_for('flights') }}">Search Authorized Flights</a>
+        </div>
+    </div>
+
+    {% if purchases %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Ticket</th>
+                        <th>Flight</th>
+                        <th>Route</th>
+                        <th>Departure</th>
+                        <th>Purchase Date</th>
+                        <th>Seat</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for purchase in purchases %}
+                        <tr>
+                            <td>{{ purchase.customer_email }}</td>
+                            <td>#{{ purchase.ticket_id }}</td>
+                            <td>
+                                <strong>{{ purchase.flight_num }}</strong><br>
+                                <span class="subtle">{{ purchase.airline_name }}</span>
+                            </td>
+                            <td>{{ purchase.departure_airport }} ({{ purchase.departure_city }}) → {{ purchase.arrival_airport }} ({{ purchase.arrival_city }})</td>
+                            <td>{{ purchase.departure_time|datetime_display }}</td>
+                            <td>{{ purchase.purchase_date|date_display }}</td>
+                            <td style="text-transform: capitalize;">{{ purchase.seat_class }}</td>
+                            <td>{{ purchase.price_charged|money }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty">No booking-agent purchases matched the current filters.</div>
+    {% endif %}
+</section>
+{% endblock %}

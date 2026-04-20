@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Flight Status{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Public Lookup</span>
+    <h1>Check the status of an in-progress flight.</h1>
+    <p>The rubric requires a public status lookup keyed by airline and flight number. This page only returns active in-progress flights.</p>
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Status Query</h2>
+        <form method="get" class="form-grid">
+            <div>
+                <label for="airline_name">Airline</label>
+                <select id="airline_name" name="airline_name">
+                    <option value="">Select an airline</option>
+                    {% for airline in airlines %}
+                        <option value="{{ airline }}" {% if filters.airline_name == airline %}selected{% endif %}>{{ airline }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="flight_num">Flight Number</label>
+                <input id="flight_num" name="flight_num" value="{{ filters.flight_num }}" placeholder="SJ104">
+            </div>
+
+            <div class="actions">
+                <button type="submit">Lookup Status</button>
+                <a class="button secondary" href="{{ url_for('status_lookup') }}">Clear</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Lookup Result</h2>
+        {% if result %}
+            <div class="tag-row">
+                <span class="status-badge status-{{ result.status }}">{{ result.status }}</span>
+                <span class="tag">{{ result.airline_name }}</span>
+                <span class="tag">{{ result.flight_num }}</span>
+            </div>
+            <p><strong>Route:</strong> {{ result.departure_airport }} ({{ result.departure_city }}) → {{ result.arrival_airport }} ({{ result.arrival_city }})</p>
+            <p><strong>Departure:</strong> {{ result.departure_time|datetime_display }}</p>
+            <p><strong>Arrival:</strong> {{ result.arrival_time|datetime_display }}</p>
+        {% else %}
+            <div class="empty">Run a lookup to see the live status record for an in-progress flight.</div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

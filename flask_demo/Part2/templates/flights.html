@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Search Flights{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Structured Search</span>
+    <h1>Find upcoming flights using airports, cities, dates, and airline filters.</h1>
+    <p>Search is constrained to future flights and uses exact filter fields rather than free-form SQL-like input.</p>
+</section>
+
+<section class="card">
+    <h2>Search Filters</h2>
+    <form method="get" class="form-grid columns-2">
+        <div>
+            <label for="departure_airport">Departure Airport</label>
+            <select id="departure_airport" name="departure_airport">
+                <option value="">Any departure airport</option>
+                {% for airport in airports %}
+                    <option value="{{ airport.name }}" {% if filters.departure_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="departure_city">Departure City</label>
+            <select id="departure_city" name="departure_city">
+                <option value="">Any departure city</option>
+                {% for city in cities %}
+                    <option value="{{ city }}" {% if filters.departure_city == city %}selected{% endif %}>{{ city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="arrival_airport">Arrival Airport</label>
+            <select id="arrival_airport" name="arrival_airport">
+                <option value="">Any arrival airport</option>
+                {% for airport in airports %}
+                    <option value="{{ airport.name }}" {% if filters.arrival_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="arrival_city">Arrival City</label>
+            <select id="arrival_city" name="arrival_city">
+                <option value="">Any arrival city</option>
+                {% for city in cities %}
+                    <option value="{{ city }}" {% if filters.arrival_city == city %}selected{% endif %}>{{ city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="departure_date">Departure Date</label>
+            <input id="departure_date" type="date" name="departure_date" value="{{ filters.departure_date }}">
+        </div>
+
+        <div>
+            <label for="airline_name">Airline</label>
+            <select id="airline_name" name="airline_name">
+                <option value="">Any airline</option>
+                {% for airline in airlines %}
+                    <option value="{{ airline }}" {% if filters.airline_name == airline %}selected{% endif %}>{{ airline }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="actions">
+            <button type="submit">Search Flights</button>
+            <a class="button secondary" href="{{ url_for('flights') }}">Reset Filters</a>
+        </div>
+    </form>
+    {% if session.get('role') == 'booking_agent' %}
+        <p class="subtle">Booking agents only see airlines they are authorized to represent.</p>
+    {% endif %}
+</section>
+
+<section class="wide-card">
+    <div class="split">
+        <div>
+            <h2>Matching Flights</h2>
+            <p>{{ flights|length }} result{% if flights|length != 1 %}s{% endif %} returned.</p>
+        </div>
+        {% if can_book %}
+            <div class="tag-row">
+                <span class="tag">Booking enabled for {{ session.get('role').replace('_', ' ') }}</span>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if flights %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Flight</th>
+                        <th>Route</th>
+                        <th>Schedule</th>
+                        <th>Inventory</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for flight in flights %}
+                        <tr>
+                            <td>
+                                <strong>{{ flight.flight_num }}</strong><br>
+                                <span class="subtle">{{ flight.airline_name }} · {{ flight.price|money }} base</span>
+                            </td>
+                            <td>{{ flight.departure_airport }} ({{ flight.departure_city }}) → {{ flight.arrival_airport }} ({{ flight.arrival_city }})</td>
+                            <td>
+                                Depart: {{ flight.departure_time|datetime_display }}<br>
+                                Arrive: {{ flight.arrival_time|datetime_display }}
+                            </td>
+                            <td>{{ flight.booked_tickets }}/{{ flight.total_capacity }} tickets sold</td>
+                            <td><span class="status-badge status-{{ flight.status }}">{{ flight.status }}</span></td>
+                            <td>
+                                {% if can_book %}
+                                    {% if session.get('role') == 'booking_agent' and flight.airline_name not in authorized_airlines %}
+                                        <span class="subtle">Not authorized</span>
+                                    {% else %}
+                                        <a class="button secondary" href="{{ url_for('flight_detail', flight_num=flight.flight_num) }}">View / Book</a>
+                                    {% endif %}
+                                {% else %}
+                                    <a class="button secondary" href="{{ url_for('flight_detail', flight_num=flight.flight_num) }}">View Details</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty">No upcoming flights matched the current structured filters.</div>
+    {% endif %}
+</section>
+{% endblock %}

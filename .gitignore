@@ -1,0 +1,20 @@
+# macOS metadata
+.DS_Store
+._*
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments and local env files
+.env
+.venv/
+env/
+venv/
+
+# Editor and tool caches
+.idea/
+.vscode/
+.pytest_cache/
+.mypy_cache/

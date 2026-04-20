@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Booking Result{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">{% if success %}Booking Confirmed{% else %}Booking Failed{% endif %}</span>
+    <h1>{% if success %}Ticket reservation completed.{% else %}Ticket reservation was rejected.{% endif %}</h1>
+    <p>{{ message }}</p>
+</section>
+
+<section class="card">
+    {% if success %}
+        <div class="metric-grid">
+            <div class="metric">
+                <div class="metric-label">Ticket ID</div>
+                <div class="metric-value">#{{ ticket_id }}</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Flight</div>
+                <div class="metric-value">{{ flight_num }}</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Seat Class</div>
+                <div class="metric-value" style="text-transform: capitalize;">{{ seat_class }}</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Price Charged</div>
+                <div class="metric-value">{{ price|money }}</div>
+            </div>
+        </div>
+
+        <div class="tag-row">
+            <span class="tag">Customer: {{ customer_email }}</span>
+            {% if booking_agent_email %}
+                <span class="tag">Agent: {{ booking_agent_email }}</span>
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="empty">No ticket was created, and the purchase transaction was rolled back.</div>
+    {% endif %}
+
+    <div class="actions">
+        {% if session.get('role') == 'customer' %}
+            <a class="button" href="{{ url_for('customer_portal') }}">Go to Customer Dashboard</a>
+        {% elif session.get('role') == 'booking_agent' %}
+            <a class="button" href="{{ url_for('agent_portal') }}">Go to Agent Dashboard</a>
+        {% endif %}
+        <a class="button secondary" href="{{ url_for('flights') }}">Return to Flight Search</a>
+    </div>
+</section>
+{% endblock %}

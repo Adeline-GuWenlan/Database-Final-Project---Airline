@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Customer Dashboard</span>
+    <h1>Review trips, filter bookings, and inspect spending trends.</h1>
+    <p>The default trip view shows upcoming flights, while spending analytics summarize the last 12 months and visualize the last 6 months.</p>
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Trip Filters</h2>
+        <form method="get" class="form-grid columns-2">
+            <div>
+                <label for="scope">Trip Scope</label>
+                <select id="scope" name="scope">
+                    <option value="upcoming" {% if filters.scope == 'upcoming' %}selected{% endif %}>Upcoming only</option>
+                    <option value="all" {% if filters.scope == 'all' %}selected{% endif %}>All trips</option>
+                    <option value="past" {% if filters.scope == 'past' %}selected{% endif %}>Past trips</option>
+                </select>
+            </div>
+            <div>
+                <label for="start_date">Departure Start</label>
+                <input id="start_date" type="date" name="start_date" value="{{ filters.start_date }}">
+            </div>
+            <div>
+                <label for="end_date">Departure End</label>
+                <input id="end_date" type="date" name="end_date" value="{{ filters.end_date }}">
+            </div>
+            <div>
+                <label for="departure_airport">Departure Airport</label>
+                <select id="departure_airport" name="departure_airport">
+                    <option value="">Any departure airport</option>
+                    {% for airport in airports %}
+                        <option value="{{ airport.name }}" {% if filters.departure_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="arrival_airport">Arrival Airport</label>
+                <select id="arrival_airport" name="arrival_airport">
+                    <option value="">Any arrival airport</option>
+                    {% for airport in airports %}
+                        <option value="{{ airport.name }}" {% if filters.arrival_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="actions">
+                <button type="submit">Apply Filters</button>
+                <a class="button secondary" href="{{ url_for('customer_portal') }}">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Spending Analytics</h2>
+        {% if spending %}
+            <div class="metric">
+                <div class="metric-label">{{ spending.title }}</div>
+                <div class="metric-value">{{ spending.total|money }}</div>
+                <div class="subtle">{{ spending.date_label }}</div>
+            </div>
+        {% endif %}
+        <form method="get" class="form-grid columns-2" style="margin-top: 16px;">
+            <input type="hidden" name="scope" value="{{ filters.scope }}">
+            <input type="hidden" name="start_date" value="{{ filters.start_date }}">
+            <input type="hidden" name="end_date" value="{{ filters.end_date }}">
+            <input type="hidden" name="departure_airport" value="{{ filters.departure_airport }}">
+            <input type="hidden" name="arrival_airport" value="{{ filters.arrival_airport }}">
+            <div>
+                <label for="analytics_start">Analytics Start</label>
+                <input id="analytics_start" type="date" name="analytics_start" value="{{ filters.analytics_start }}">
+            </div>
+            <div>
+                <label for="analytics_end">Analytics End</label>
+                <input id="analytics_end" type="date" name="analytics_end" value="{{ filters.analytics_end }}">
+            </div>
+            <div class="actions">
+                <button type="submit">Run Custom Analytics</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="wide-card">
+    <h2>Spending Chart</h2>
+    {% if spending and spending.chart %}
+        <div class="bar-chart">
+            <div class="bars">
+                {% for bar in spending.chart %}
+                    <div class="bar-col">
+                        <div class="bar" style="height: {{ bar.height }}px;"></div>
+                        <div class="bar-value">{{ bar.value|money }}</div>
+                        <div class="bar-label">{{ bar.label }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <div class="empty">No spending data is available for the selected window.</div>
+    {% endif %}
+</section>
+
+<section class="wide-card">
+    <div class="split">
+        <div>
+            <h2>Booked Flights</h2>
+            <p>{{ purchases|length }} trip{% if purchases|length != 1 %}s{% endif %} matched the current filters.</p>
+        </div>
+        <div class="actions">
+            <a class="button" href="{{ url_for('flights') }}">Search More Flights</a>
+        </div>
+    </div>
+
+    {% if purchases %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Flight</th>
+                        <th>Route</th>
+                        <th>Departure</th>
+                        <th>Purchase</th>
+                        <th>Seat</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for purchase in purchases %}
+                        <tr>
+                            <td>#{{ purchase.ticket_id }}</td>
+                            <td>
+                                <strong>{{ purchase.flight_num }}</strong><br>
+                                <span class="subtle">{{ purchase.airline_name }}</span>
+                            </td>
+                            <td>{{ purchase.departure_airport }} ({{ purchase.departure_city }}) → {{ purchase.arrival_airport }} ({{ purchase.arrival_city }})</td>
+                            <td>{{ purchase.departure_time|datetime_display }}</td>
+                            <td>{{ purchase.purchase_date|date_display }}</td>
+                            <td style="text-transform: capitalize;">{{ purchase.seat_class }}</td>
+                            <td>{{ purchase.price_charged|money }}</td>
+                            <td><span class="status-badge status-{{ purchase.status }}">{{ purchase.status }}</span></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty">No bookings matched the current trip filters.</div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,516 @@
+{% extends "base.html" %}
+
+{% block title %}Staff Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Airline Staff</span>
+    <h1>{{ session.get('airline_name') }} operations dashboard.</h1>
+    <p>Staff can monitor the next 30 days of flights, inspect passenger activity, review airline analytics, and perform admin or operator actions depending on permission level.</p>
+    <div class="tag-row">
+        {% for permission in permissions %}
+            <span class="tag">Permission: {{ permission }}</span>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Flight Window Filters</h2>
+        <form method="get" class="form-grid columns-2">
+            <div>
+                <label for="start_date">Departure Start</label>
+                <input id="start_date" type="date" name="start_date" value="{{ filters.start_date }}">
+            </div>
+            <div>
+                <label for="end_date">Departure End</label>
+                <input id="end_date" type="date" name="end_date" value="{{ filters.end_date }}">
+            </div>
+            <div>
+                <label for="departure_airport">Departure Airport</label>
+                <select id="departure_airport" name="departure_airport">
+                    <option value="">Any departure airport</option>
+                    {% for airport in airports %}
+                        <option value="{{ airport.name }}" {% if filters.departure_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="arrival_airport">Arrival Airport</label>
+                <select id="arrival_airport" name="arrival_airport">
+                    <option value="">Any arrival airport</option>
+                    {% for airport in airports %}
+                        <option value="{{ airport.name }}" {% if filters.arrival_airport == airport.name %}selected{% endif %}>{{ airport.name }} · {{ airport.city }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="actions">
+                <button type="submit">Apply Filters</button>
+                <a class="button secondary" href="{{ url_for('staff_portal') }}">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Lookup Tools</h2>
+        <form method="get" class="form-grid">
+            <div>
+                <label for="passenger_flight_num">Passenger List by Flight</label>
+                <input id="passenger_flight_num" name="passenger_flight_num" value="{{ filters.passenger_flight_num }}" placeholder="SJ101">
+            </div>
+            <div>
+                <label for="customer_email">Customer Flight History on This Airline</label>
+                <input id="customer_email" type="email" name="customer_email" value="{{ filters.customer_email }}" placeholder="customer@example.com">
+            </div>
+
+            <input type="hidden" name="start_date" value="{{ filters.start_date }}">
+            <input type="hidden" name="end_date" value="{{ filters.end_date }}">
+            <input type="hidden" name="departure_airport" value="{{ filters.departure_airport }}">
+            <input type="hidden" name="arrival_airport" value="{{ filters.arrival_airport }}">
+
+            <div class="actions">
+                <button type="submit">Run Lookup</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="wide-card">
+    <div class="split">
+        <div>
+            <h2>Flights in the Next 30 Days</h2>
+            <p>{{ flights|length }} flight{% if flights|length != 1 %}s{% endif %} matched the current staff filters.</p>
+        </div>
+    </div>
+
+    {% if flights %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Flight</th>
+                        <th>Route</th>
+                        <th>Schedule</th>
+                        <th>Status</th>
+                        <th>Price</th>
+                        <th>Load</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for flight in flights %}
+                        <tr>
+                            <td><strong>{{ flight.flight_num }}</strong><br><span class="subtle">Plane {{ flight.airplane_id }}</span></td>
+                            <td>{{ flight.departure_airport }} ({{ flight.departure_city }}) → {{ flight.arrival_airport }} ({{ flight.arrival_city }})</td>
+                            <td>
+                                Depart: {{ flight.departure_time|datetime_display }}<br>
+                                Arrive: {{ flight.arrival_time|datetime_display }}
+                            </td>
+                            <td><span class="status-badge status-{{ flight.status }}">{{ flight.status }}</span></td>
+                            <td>{{ flight.price|money }}</td>
+                            <td>{{ flight.sold_tickets }}/{{ flight.total_capacity }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty">No flights were found in the next 30-day operating window.</div>
+    {% endif %}
+</section>
+
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Passenger List</h2>
+        {% if passengers %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Email</th>
+                            <th>Ticket</th>
+                            <th>Seat Class</th>
+                            <th>Purchase Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for passenger in passengers %}
+                            <tr>
+                                <td>{{ passenger.name }}</td>
+                                <td>{{ passenger.email }}</td>
+                                <td>#{{ passenger.ticket_id }}</td>
+                                <td style="text-transform: capitalize;">{{ passenger.seat_class }}</td>
+                                <td>{{ passenger.purchase_date|date_display }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">Run a passenger lookup for a flight number operated by your airline.</div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Customer Flight History</h2>
+        {% if customer_flights %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Flight</th>
+                            <th>Route</th>
+                            <th>Departure</th>
+                            <th>Seat</th>
+                            <th>Purchase Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trip in customer_flights %}
+                            <tr>
+                                <td><strong>{{ trip.flight_num }}</strong><br><span class="status-badge status-{{ trip.status }}">{{ trip.status }}</span></td>
+                                <td>{{ trip.departure_airport }} ({{ trip.departure_city }}) → {{ trip.arrival_airport }} ({{ trip.arrival_city }})</td>
+                                <td>{{ trip.departure_time|datetime_display }}</td>
+                                <td style="text-transform: capitalize;">{{ trip.seat_class }}</td>
+                                <td>{{ trip.purchase_date|date_display }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">Search for a customer email to review flights taken on this airline.</div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="wide-card">
+    <h2>Airline Analytics</h2>
+    {% if analytics %}
+        <div class="metric-grid">
+            <div class="metric">
+                <div class="metric-label">Most Frequent Customer (Last Year)</div>
+                <div class="metric-value">
+                    {% if analytics.most_frequent_customer %}
+                        {{ analytics.most_frequent_customer.name }}
+                    {% else %}
+                        None
+                    {% endif %}
+                </div>
+                <div class="subtle">
+                    {% if analytics.most_frequent_customer %}
+                        {{ analytics.most_frequent_customer.trips_taken }} trip(s)
+                    {% else %}
+                        No qualifying trips.
+                    {% endif %}
+                </div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Delayed Flights</div>
+                <div class="metric-value">{{ analytics.delay_stats.delayed }}</div>
+                <div class="subtle">Non-delayed flights: {{ analytics.delay_stats.non_delayed }}</div>
+            </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top: 20px;">
+            <div class="card">
+                <h3>Tickets Sold per Month</h3>
+                {% if analytics.tickets_per_month %}
+                    <div class="bars">
+                        {% for bar in analytics.tickets_per_month %}
+                            <div class="bar-col">
+                                <div class="bar" style="height: {{ bar.height }}px;"></div>
+                                <div class="bar-value">{{ "%.0f"|format(bar.value) }}</div>
+                                <div class="bar-label">{{ bar.label }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty">No ticket volume data is available.</div>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <h3>Top Destinations</h3>
+                <h4>Last 3 Months</h4>
+                {% if analytics.top_destinations_3m %}
+                    <div class="tag-row">
+                        {% for row in analytics.top_destinations_3m %}
+                            <span class="tag">{{ row.arrival_airport }} · {{ row.arrival_city }} ({{ row.tickets_sold }})</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty">No destination data for the last 3 months.</div>
+                {% endif %}
+
+                <h4 style="margin-top: 18px;">Last Year</h4>
+                {% if analytics.top_destinations_1y %}
+                    <div class="tag-row">
+                        {% for row in analytics.top_destinations_1y %}
+                            <span class="tag">{{ row.arrival_airport }} · {{ row.arrival_city }} ({{ row.tickets_sold }})</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty">No destination data for the last year.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top: 20px;">
+            <div class="card">
+                <h3>Top Booking Agents This Month</h3>
+                <h4>By Tickets</h4>
+                {% if analytics.month_by_tickets %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Tickets</th>
+                                    <th>Commission</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in analytics.month_by_tickets %}
+                                    <tr>
+                                        <td>{{ row.booking_agent_email }}</td>
+                                        <td>{{ row.tickets_sold }}</td>
+                                        <td>{{ row.commission_total|money }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">No booking-agent activity this month.</div>
+                {% endif %}
+
+                <h4 style="margin-top: 18px;">By Commission</h4>
+                {% if analytics.month_by_commission %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Commission</th>
+                                    <th>Tickets</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in analytics.month_by_commission %}
+                                    <tr>
+                                        <td>{{ row.booking_agent_email }}</td>
+                                        <td>{{ row.commission_total|money }}</td>
+                                        <td>{{ row.tickets_sold }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">No commission activity this month.</div>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <h3>Top Booking Agents This Year</h3>
+                <h4>By Tickets</h4>
+                {% if analytics.year_by_tickets %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Tickets</th>
+                                    <th>Commission</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in analytics.year_by_tickets %}
+                                    <tr>
+                                        <td>{{ row.booking_agent_email }}</td>
+                                        <td>{{ row.tickets_sold }}</td>
+                                        <td>{{ row.commission_total|money }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">No booking-agent activity this year.</div>
+                {% endif %}
+
+                <h4 style="margin-top: 18px;">By Commission</h4>
+                {% if analytics.year_by_commission %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Commission</th>
+                                    <th>Tickets</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in analytics.year_by_commission %}
+                                    <tr>
+                                        <td>{{ row.booking_agent_email }}</td>
+                                        <td>{{ row.commission_total|money }}</td>
+                                        <td>{{ row.tickets_sold }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">No commission activity this year.</div>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <div class="empty">Analytics could not be loaded.</div>
+    {% endif %}
+</section>
+
+{% if 'admin' in permissions %}
+<section class="grid grid-2">
+    <div class="card">
+        <h2>Admin Actions</h2>
+        <h3>Add Airport</h3>
+        <form method="post" action="{{ url_for('add_airport') }}" class="form-grid columns-2">
+            <div>
+                <label for="airport_code">Airport Code</label>
+                <input id="airport_code" name="airport_code" placeholder="SZX" required>
+            </div>
+            <div>
+                <label for="airport_city">City</label>
+                <input id="airport_city" name="city" placeholder="Shenzhen" required>
+            </div>
+            <div class="actions">
+                <button type="submit">Add Airport</button>
+            </div>
+        </form>
+
+        <h3 style="margin-top: 24px;">Associate Booking Agent</h3>
+        <form method="post" action="{{ url_for('authorize_agent') }}" class="form-grid">
+            <div>
+                <label for="agent_email">Booking Agent</label>
+                <select id="agent_email" name="agent_email">
+                    {% for agent in agents %}
+                        <option value="{{ agent.email }}">{{ agent.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="actions">
+                <button type="submit">Authorize Agent</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Add Airplane</h2>
+        <form method="post" action="{{ url_for('add_airplane') }}" class="form-grid columns-2">
+            <div>
+                <label for="airplane_id">Airplane ID</label>
+                <input id="airplane_id" name="airplane_id" type="number" min="1" required>
+            </div>
+            <div>
+                <label for="economy_capacity">Economy Capacity</label>
+                <input id="economy_capacity" name="economy_capacity" type="number" min="0" value="0">
+            </div>
+            <div>
+                <label for="business_capacity">Business Capacity</label>
+                <input id="business_capacity" name="business_capacity" type="number" min="0" value="0">
+            </div>
+            <div>
+                <label for="first_capacity">First Capacity</label>
+                <input id="first_capacity" name="first_capacity" type="number" min="0" value="0">
+            </div>
+            <div class="actions">
+                <button type="submit">Add Airplane</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="wide-card">
+    <h2>Create Flight</h2>
+    <form method="post" action="{{ url_for('add_flight') }}" class="form-grid columns-2">
+        <div>
+            <label for="flight_num">Flight Number</label>
+            <input id="flight_num" name="flight_num" placeholder="SJ210" required>
+        </div>
+        <div>
+            <label for="airplane_id_select">Airplane</label>
+            <select id="airplane_id_select" name="airplane_id">
+                {% for airplane in airplanes %}
+                    <option value="{{ airplane.id }}">{{ airplane.id }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="departure_airport_select">Departure Airport</label>
+            <select id="departure_airport_select" name="departure_airport">
+                {% for airport in airports %}
+                    <option value="{{ airport.name }}">{{ airport.name }} · {{ airport.city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="arrival_airport_select">Arrival Airport</label>
+            <select id="arrival_airport_select" name="arrival_airport">
+                {% for airport in airports %}
+                    <option value="{{ airport.name }}">{{ airport.name }} · {{ airport.city }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="departure_time">Departure Time</label>
+            <input id="departure_time" type="datetime-local" name="departure_time" required>
+        </div>
+        <div>
+            <label for="arrival_time">Arrival Time</label>
+            <input id="arrival_time" type="datetime-local" name="arrival_time" required>
+        </div>
+        <div>
+            <label for="price">Base Price</label>
+            <input id="price" name="price" type="number" step="0.01" min="0.01" required>
+        </div>
+        <div>
+            <label for="status">Initial Status</label>
+            <select id="status" name="status">
+                <option value="upcoming">upcoming</option>
+                <option value="delayed">delayed</option>
+                <option value="in-progress">in-progress</option>
+            </select>
+        </div>
+        <div class="actions">
+            <button type="submit">Create Flight</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+
+{% if 'operator' in permissions %}
+<section class="wide-card">
+    <h2>Operator Action: Update Flight Status</h2>
+    <form method="post" action="{{ url_for('update_flight_status') }}" class="form-grid columns-2">
+        <div>
+            <label for="status_flight_num">Flight Number</label>
+            <input id="status_flight_num" name="flight_num" placeholder="SJ101" required>
+        </div>
+        <div>
+            <label for="status_value">New Status</label>
+            <select id="status_value" name="status">
+                <option value="upcoming">upcoming</option>
+                <option value="in-progress">in-progress</option>
+                <option value="delayed">delayed</option>
+            </select>
+        </div>
+        <div class="actions">
+            <button type="submit">Update Status</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

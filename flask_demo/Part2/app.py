@@ -36,6 +36,7 @@ DB_CONFIG = {
     "user": os.getenv("AIRLINE_DB_USER", "root"),
     "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
     "database": os.getenv("AIRLINE_DB_NAME", "airline"),
+    "unix_socket": "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock"
 }
 
 
@@ -1380,6 +1381,114 @@ def customer_portal():
 @roles_required("customer")
 def my_purchases():
     return redirect(url_for("customer_portal"))
+
+
+@app.route("/saved-flights/save/<flight_num>", methods=["POST"])
+@roles_required("customer")
+def save_flight(flight_num):
+    flight_number = validate_flight_num(flight_num)
+    customer_email = session["customer_email"]
+
+    try:
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+
+        # Check if flight exists and is upcoming
+        cursor.execute(
+            "SELECT flight_num FROM Flight WHERE flight_num = %s AND departure_time >= NOW()",
+            (flight_number,),
+        )
+        if not cursor.fetchone():
+            flash("Flight not found or has already departed.", "error")
+            cursor.close()
+            conn.close()
+            return redirect(request.referrer or url_for("flights"))
+
+        # Insert into SavedFlight
+        cursor.execute(
+            "INSERT INTO SavedFlight (customer_email, flight_num) VALUES (%s, %s)",
+            (customer_email, flight_number),
+        )
+        conn.commit()
+        flash("Flight saved successfully.", "success")
+    except mysql.connector.IntegrityError:
+        flash("This flight is already saved.", "error")
+    except Error as exc:
+        flash(str(exc), "error")
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+    return redirect(request.referrer or url_for("flights"))
+
+
+@app.route("/saved-flights")
+@roles_required("customer")
+def saved_flights():
+    customer_email = session["customer_email"]
+    saved_flights = []
+
+    try:
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+        cursor.execute(
+            """
+            SELECT
+                sf.saved_at,
+                f.flight_num,
+                f.airline_name,
+                f.departure_airport,
+                dep.city AS departure_city,
+                f.arrival_airport,
+                arr.city AS arrival_city,
+                f.departure_time,
+                f.arrival_time,
+                f.price,
+                f.status
+            FROM SavedFlight sf
+            JOIN Flight f ON sf.flight_num = f.flight_num
+            JOIN Airport dep ON dep.name = f.departure_airport
+            JOIN Airport arr ON arr.name = f.arrival_airport
+            WHERE sf.customer_email = %s
+            ORDER BY sf.saved_at DESC
+            """,
+            (customer_email,),
+        )
+        saved_flights = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Error as exc:
+        flash(str(exc), "error")
+
+    return render_template("saved_flights.html", saved_flights=saved_flights)
+
+
+@app.route("/saved-flights/remove/<flight_num>", methods=["POST"])
+@roles_required("customer")
+def remove_saved_flight(flight_num):
+    flight_number = validate_flight_num(flight_num)
+    customer_email = session["customer_email"]
+
+    try:
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+        cursor.execute(
+            "DELETE FROM SavedFlight WHERE customer_email = %s AND flight_num = %s",
+            (customer_email, flight_number),
+        )
+        if cursor.rowcount > 0:
+            conn.commit()
+            flash("Flight removed from saved list.", "success")
+        else:
+            flash("Flight not found in your saved list.", "error")
+        cursor.close()
+        conn.close()
+    except Error as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("saved_flights"))
 
 
 @app.route("/agent")

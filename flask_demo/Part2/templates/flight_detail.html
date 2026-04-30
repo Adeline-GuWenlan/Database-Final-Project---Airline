@@ -12,73 +12,83 @@
         <span class="tag">Arrive {{ flight.arrival_time|datetime_display }}</span>
         <span class="tag">Base price {{ flight.price|money }}</span>
     </div>
-    <p>{{ flight.departure_airport }} ({{ flight.departure_city }}) to {{ flight.arrival_airport }} ({{ flight.arrival_city }})</p>
+    <p>{{ flight.departure_airport }} ({{ flight.departure_city }}) to {{ flight.arrival_airport }} ({{
+        flight.arrival_city }})</p>
 </section>
 
 <section class="grid grid-2">
     <div class="card">
         <h2>Seat Classes</h2>
         {% if seat_classes %}
-            <div class="form-grid">
-                {% for seat in seat_classes %}
-                    <div class="wide-card" style="margin-top: 0;">
-                        <div class="split">
-                            <div>
-                                <h3 style="margin-bottom: 6px; text-transform: capitalize;">{{ seat.seat_class }}</h3>
-                                <p>{{ seat.remaining }} seats left out of {{ seat.capacity }}.</p>
-                            </div>
-                            <div>
-                                <div class="metric-value">{{ seat.price|money }}</div>
-                                <div class="subtle">charged price</div>
-                            </div>
-                        </div>
+        <div class="form-grid">
+            {% for seat in seat_classes %}
+            <div class="wide-card" style="margin-top: 0;">
+                <div class="split">
+                    <div>
+                        <h3 style="margin-bottom: 6px; text-transform: capitalize;">{{ seat.seat_class }}</h3>
+                        <p>{{ seat.remaining }} seats left out of {{ seat.capacity }}.</p>
                     </div>
-                {% endfor %}
+                    <div>
+                        <div class="metric-value">{{ seat.price|money }}</div>
+                        <div class="subtle">charged price</div>
+                    </div>
+                </div>
             </div>
+            {% endfor %}
+        </div>
         {% else %}
-            <div class="empty">No seat classes were defined for this airplane.</div>
+        <div class="empty">No seat classes were defined for this airplane.</div>
         {% endif %}
     </div>
 
     <div class="card">
         <h2>Booking</h2>
         {% if can_book and agent_can_book and bookable_seat_classes %}
-            <form method="post" action="{{ url_for('book_ticket') }}" class="form-grid">
-                <input type="hidden" name="flight_num" value="{{ flight.flight_num }}">
+        <form method="post" action="{{ url_for('book_ticket') }}" class="form-grid">
+            <input type="hidden" name="flight_num" value="{{ flight.flight_num }}">
 
-                <div>
-                    <label for="seat_class">Seat Class</label>
-                    <select id="seat_class" name="seat_class">
-                        {% for seat in bookable_seat_classes %}
-                            <option value="{{ seat.seat_class }}">{{ seat.seat_class|capitalize }} · {{ seat.price|money }} · {{ seat.remaining }} left</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                {% if session.get('role') == 'booking_agent' %}
-                    <div>
-                        <label for="customer_email">Customer Email</label>
-                        <input id="customer_email" type="email" name="customer_email" placeholder="customer@example.com" required>
-                    </div>
-                    <p class="subtle">Agent purchases are checked against the authorization table before the ticket is created.</p>
-                {% endif %}
-
-                <div class="actions">
-                    <button type="submit">Book This Flight</button>
-                    <a class="button secondary" href="{{ url_for('flights') }}">Back to Search</a>
-                </div>
-            </form>
-        {% elif session.get('role') == 'booking_agent' and not agent_can_book %}
-            <div class="empty">This booking agent is not authorized to sell tickets for {{ flight.airline_name }}.</div>
-        {% elif can_book and not bookable_seat_classes %}
-            <div class="empty">All configured seat classes for this flight are currently sold out.</div>
-        {% else %}
-            <div class="empty">
-                Sign in as a customer or authorized booking agent to purchase this flight.
-                <div class="actions">
-                    <a class="button" href="{{ url_for('login') }}">Go to Login</a>
-                </div>
+            <div>
+                <label for="seat_class">Seat Class</label>
+                <select id="seat_class" name="seat_class">
+                    {% for seat in bookable_seat_classes %}
+                    <option value="{{ seat.seat_class }}">{{ seat.seat_class|capitalize }} · {{ seat.price|money }} · {{
+                        seat.remaining }} left</option>
+                    {% endfor %}
+                </select>
             </div>
+
+            {% if session.get('role') == 'booking_agent' %}
+            <div>
+                <label for="customer_email">Customer Email</label>
+                <input id="customer_email" type="email" name="customer_email" placeholder="customer@example.com"
+                    required>
+            </div>
+            <p class="subtle">Agent purchases are checked against the authorization table before the ticket is created.
+            </p>
+            {% endif %}
+
+            <div class="actions">
+                <button type="submit">Book This Flight</button>
+                <a class="button secondary" href="{{ url_for('flights') }}">Back to Search</a>
+            </div>
+        </form>
+        {% if session.get('role') == 'customer' %}
+        <form method="post" action="{{ url_for('save_flight', flight_num=flight.flight_num) }}"
+            style="margin-top: 16px;">
+            <button type="submit" class="button accent">Save This Flight</button>
+        </form>
+        {% endif %}
+        {% elif session.get('role') == 'booking_agent' and not agent_can_book %}
+        <div class="empty">This booking agent is not authorized to sell tickets for {{ flight.airline_name }}.</div>
+        {% elif can_book and not bookable_seat_classes %}
+        <div class="empty">All configured seat classes for this flight are currently sold out.</div>
+        {% else %}
+        <div class="empty">
+            Sign in as a customer or authorized booking agent to purchase this flight.
+            <div class="actions">
+                <a class="button" href="{{ url_for('login') }}">Go to Login</a>
+            </div>
+        </div>
         {% endif %}
     </div>
 </section>

@@ -147,6 +147,15 @@ CREATE TABLE AuthorizedBy (
         ON UPDATE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS SavedFlight (
+    customer_email VARCHAR(100) NOT NULL,
+    flight_num VARCHAR(10) NOT NULL,
+    saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (customer_email, flight_num),
+    FOREIGN KEY (customer_email) REFERENCES Customer(email) ON DELETE CASCADE,
+    FOREIGN KEY (flight_num) REFERENCES Flight(flight_num) ON DELETE CASCADE
+);
+
 -- Indexes for public search, dashboards, analytics, and session-protected lookups.
 CREATE INDEX idx_flight_departure_status
     ON Flight (departure_time, status);

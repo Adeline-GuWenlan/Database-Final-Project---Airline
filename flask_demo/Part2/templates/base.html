@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -140,7 +141,9 @@
             text-transform: uppercase;
         }
 
-        h1, h2, h3 {
+        h1,
+        h2,
+        h3 {
             margin-top: 0;
             line-height: 1.15;
         }
@@ -440,11 +443,12 @@
             align-items: flex-start;
         }
 
-        .split > * {
+        .split>* {
             flex: 1;
         }
 
         @media (max-width: 900px) {
+
             .grid-2,
             .grid-3,
             .form-grid.columns-2 {
@@ -462,6 +466,7 @@
         }
 
         @media (max-width: 640px) {
+
             .page,
             .topbar-inner {
                 width: min(100% - 20px, 1180px);
@@ -480,6 +485,7 @@
     </style>
     {% block extra_head %}{% endblock %}
 </head>
+
 <body>
     <div class="topbar">
         <div class="topbar-inner">
@@ -488,19 +494,21 @@
                 <a href="{{ url_for('flights') }}">Search Flights</a>
                 <a href="{{ url_for('status_lookup') }}">Flight Status</a>
                 {% if session.get('role') == 'customer' %}
-                    <a href="{{ url_for('customer_portal') }}">Customer Dashboard</a>
+                <a href="{{ url_for('customer_portal') }}">Customer Dashboard</a>
+                <a href="{{ url_for('saved_flights') }}">Saved Flights</a>
                 {% elif session.get('role') == 'booking_agent' %}
-                    <a href="{{ url_for('agent_portal') }}">Agent Dashboard</a>
+                <a href="{{ url_for('agent_portal') }}">Agent Dashboard</a>
                 {% elif session.get('role') == 'airline_staff' %}
-                    <a href="{{ url_for('staff_portal') }}">Staff Dashboard</a>
+                <a href="{{ url_for('staff_portal') }}">Staff Dashboard</a>
                 {% endif %}
 
                 {% if session.get('role') %}
-                    <span class="current-user">{{ session.get('display_name') }}{% if session.get('airline_name') %} · {{ session.get('airline_name') }}{% endif %}</span>
-                    <a href="{{ url_for('logout') }}">Logout</a>
+                <span class="current-user">{{ session.get('display_name') }}{% if session.get('airline_name') %} · {{
+                    session.get('airline_name') }}{% endif %}</span>
+                <a href="{{ url_for('logout') }}">Logout</a>
                 {% else %}
-                    <a href="{{ url_for('login') }}">Login</a>
-                    <a href="{{ url_for('register') }}">Register</a>
+                <a href="{{ url_for('login') }}">Login</a>
+                <a href="{{ url_for('register') }}">Register</a>
                 {% endif %}
             </div>
         </div>
@@ -508,13 +516,13 @@
 
     <main class="page">
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-stack">
-                    {% for category, message in messages %}
-                        <div class="flash {{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+        {% if messages %}
+        <div class="flash-stack">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
@@ -522,4 +530,5 @@
 
     {% block scripts %}{% endblock %}
 </body>
+
 </html>

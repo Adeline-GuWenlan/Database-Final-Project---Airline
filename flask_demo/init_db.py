@@ -7,6 +7,7 @@ DB_CONFIG = {
     "host": "localhost",
     "user": "root",
     "password": "",
+    "unix_socket": "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock"
 }
 
 
@@ -161,6 +162,16 @@ def init_database():
                 ON DELETE CASCADE ON UPDATE CASCADE
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS SavedFlight (
+            customer_email VARCHAR(100) NOT NULL,
+            flight_num VARCHAR(10) NOT NULL,
+            saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (customer_email, flight_num),
+            FOREIGN KEY (customer_email) REFERENCES Customer(email) ON DELETE CASCADE,
+            FOREIGN KEY (flight_num) REFERENCES Flight(flight_num) ON DELETE CASCADE
+        )
+        """,
         "CREATE INDEX idx_flight_departure_status ON Flight (departure_time, status)",
         "CREATE INDEX idx_flight_route_departure ON Flight (departure_airport, arrival_airport, departure_time)",
         "CREATE INDEX idx_flight_airline_departure ON Flight (airline_name, departure_time)",
@@ -262,15 +273,15 @@ def init_database():
         """
         INSERT INTO Flight (flight_num, departure_time, arrival_time, price, status,
             airline_name, airplane_id, departure_airport, arrival_airport) VALUES
-            ('SJ101', '2026-04-15 08:00:00', '2026-04-15 11:30:00', 299.00, 'upcoming', 'SkyJet', 1, 'JFK', 'LAX'),
-            ('SJ102', '2026-04-16 14:00:00', '2026-04-17 06:00:00', 899.00, 'upcoming', 'SkyJet', 1, 'JFK', 'PVG'),
-            ('SJ103', '2026-04-17 10:00:00', '2026-04-17 13:30:00', 320.00, 'upcoming', 'SkyJet', 4, 'LAX', 'SFO'),
-            ('AA201', '2026-04-15 09:00:00', '2026-04-15 22:00:00', 750.00, 'upcoming', 'AirAsia', 2, 'LAX', 'NRT'),
-            ('AA202', '2026-04-18 11:00:00', '2026-04-19 05:00:00', 680.00, 'upcoming', 'AirAsia', 2, 'NRT', 'PVG'),
-            ('DL301', '2026-04-16 07:00:00', '2026-04-16 15:00:00', 550.00, 'upcoming', 'Delta', 3, 'JFK', 'LHR'),
-            ('DL302', '2026-04-20 16:00:00', '2026-04-20 19:30:00', 275.00, 'upcoming', 'Delta', 3, 'LAX', 'JFK'),
-            ('SJ104', '2026-04-14 06:00:00', '2026-04-14 09:00:00', 310.00, 'in-progress', 'SkyJet', 1, 'SFO', 'JFK'),
-            ('AA203', '2026-04-13 10:00:00', '2026-04-13 14:00:00', 420.00, 'delayed', 'AirAsia', 2, 'PVG', 'NRT')
+            ('SJ101', '2026-05-15 08:00:00', '2026-05-15 11:30:00', 299.00, 'upcoming', 'SkyJet', 1, 'JFK', 'LAX'),
+            ('SJ102', '2026-05-16 14:00:00', '2026-05-17 06:00:00', 899.00, 'upcoming', 'SkyJet', 1, 'JFK', 'PVG'),
+            ('SJ103', '2026-05-17 10:00:00', '2026-05-17 13:30:00', 320.00, 'upcoming', 'SkyJet', 4, 'LAX', 'SFO'),
+            ('AA201', '2026-05-15 09:00:00', '2026-05-15 22:00:00', 750.00, 'upcoming', 'AirAsia', 2, 'LAX', 'NRT'),
+            ('AA202', '2026-05-18 11:00:00', '2026-05-19 05:00:00', 680.00, 'upcoming', 'AirAsia', 2, 'NRT', 'PVG'),
+            ('DL301', '2026-05-16 07:00:00', '2026-05-16 15:00:00', 550.00, 'upcoming', 'Delta', 3, 'JFK', 'LHR'),
+            ('DL302', '2026-05-20 16:00:00', '2026-05-20 19:30:00', 275.00, 'upcoming', 'Delta', 3, 'LAX', 'JFK'),
+            ('SJ104', '2026-05-14 06:00:00', '2026-05-14 09:00:00', 310.00, 'in-progress', 'SkyJet', 1, 'SFO', 'JFK'),
+            ('AA203', '2026-05-13 10:00:00', '2026-05-13 14:00:00', 420.00, 'delayed', 'AirAsia', 2, 'PVG', 'NRT')
         """,
         f"""
         INSERT INTO Customer (email, name, password, city, phone_number, passport_number, passport_country, date_of_birth) VALUES

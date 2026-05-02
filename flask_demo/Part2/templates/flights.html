@@ -151,4 +151,68 @@
     <div class="empty">No upcoming flights matched the current structured filters.</div>
     {% endif %}
 </section>
+
+<script>
+// Build airport-to-city and city-to-airports mappings
+const airportToCity = {
+    {% for airport in airports %}
+    '{{ airport.name }}': '{{ airport.city }}',
+    {% endfor %}
+};
+
+const cityToAirports = {};
+{% for airport in airports %}
+    const city = '{{ airport.city }}';
+    if (!cityToAirports[city]) {
+        cityToAirports[city] = [];
+    }
+    cityToAirports[city].push('{{ airport.name }}');
+{% endfor %}
+
+// Auto-fill functions for departure
+document.getElementById('departure_airport').addEventListener('change', function() {
+    const selectedAirport = this.value;
+    if (selectedAirport && airportToCity[selectedAirport]) {
+        document.getElementById('departure_city').value = airportToCity[selectedAirport];
+    }
+});
+
+document.getElementById('departure_city').addEventListener('change', function() {
+    const selectedCity = this.value;
+    const airportSelect = document.getElementById('departure_airport');
+
+    if (selectedCity && cityToAirports[selectedCity]) {
+        // If the city has only one airport, auto-fill it
+        if (cityToAirports[selectedCity].length === 1) {
+            airportSelect.value = cityToAirports[selectedCity][0];
+        } else if (!airportSelect.value || airportToCity[airportSelect.value] !== selectedCity) {
+            // If current airport doesn't match the city, clear it
+            airportSelect.value = '';
+        }
+    }
+});
+
+// Auto-fill functions for arrival
+document.getElementById('arrival_airport').addEventListener('change', function() {
+    const selectedAirport = this.value;
+    if (selectedAirport && airportToCity[selectedAirport]) {
+        document.getElementById('arrival_city').value = airportToCity[selectedAirport];
+    }
+});
+
+document.getElementById('arrival_city').addEventListener('change', function() {
+    const selectedCity = this.value;
+    const airportSelect = document.getElementById('arrival_airport');
+
+    if (selectedCity && cityToAirports[selectedCity]) {
+        // If the city has only one airport, auto-fill it
+        if (cityToAirports[selectedCity].length === 1) {
+            airportSelect.value = cityToAirports[selectedCity][0];
+        } else if (!airportSelect.value || airportToCity[airportSelect.value] !== selectedCity) {
+            // If current airport doesn't match the city, clear it
+            airportSelect.value = '';
+        }
+    }
+});
+</script>
 {% endblock %}

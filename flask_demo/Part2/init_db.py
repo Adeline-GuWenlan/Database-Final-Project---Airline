@@ -1,12 +1,22 @@
+import importlib.util
 from pathlib import Path
-import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SHARED_INIT = ROOT / "init_db.py"
 
-from init_db import init_database  # noqa: E402
+
+def load_init_database():
+    spec = importlib.util.spec_from_file_location("airline_shared_init_db", SHARED_INIT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load database initializer from {SHARED_INIT}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.init_database
+
+
+init_database = load_init_database()
 
 
 if __name__ == "__main__":

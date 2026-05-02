@@ -22,10 +22,19 @@ This Flask + MySQL project refines the airline reservation prototype so it align
 pip install flask mysql-connector-python
 ```
 
-2. Update database credentials in:
+2. If your MySQL user is not `root` with an empty password, set the connection values before running the app:
 
-- `flask_demo/init_db.py`
-- `flask_demo/Part2/app.py`
+```bash
+export AIRLINE_DB_USER=root
+export AIRLINE_DB_PASSWORD='your_mysql_password'
+export AIRLINE_DB_HOST=127.0.0.1
+```
+
+For XAMPP or another socket-based MySQL setup, set the socket explicitly:
+
+```bash
+export AIRLINE_DB_UNIX_SOCKET=/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock
+```
 
 3. Initialize the database:
 

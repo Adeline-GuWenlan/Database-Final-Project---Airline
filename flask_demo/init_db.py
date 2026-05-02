@@ -1,17 +1,27 @@
 import hashlib
 import os
+from pathlib import Path
 
 import mysql.connector
 
 
-DB_CONFIG = {
-    "host": os.getenv("AIRLINE_DB_HOST", "localhost"),
-    "user": os.getenv("AIRLINE_DB_USER", "root"),
-    "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
-}
-DB_UNIX_SOCKET = os.getenv("AIRLINE_DB_UNIX_SOCKET", "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
-if DB_UNIX_SOCKET:
-    DB_CONFIG["unix_socket"] = DB_UNIX_SOCKET
+DEFAULT_XAMPP_SOCKET = Path("/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
+
+
+def build_db_config():
+    config = {
+        "host": os.getenv("AIRLINE_DB_HOST", "127.0.0.1"),
+        "user": os.getenv("AIRLINE_DB_USER", "root"),
+        "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
+    }
+
+    db_unix_socket = os.getenv("AIRLINE_DB_UNIX_SOCKET")
+    if db_unix_socket:
+        config["unix_socket"] = db_unix_socket
+    elif DEFAULT_XAMPP_SOCKET.exists():
+        config["unix_socket"] = str(DEFAULT_XAMPP_SOCKET)
+
+    return config
 
 
 def sample_hash(password, salt):
@@ -25,7 +35,7 @@ def sample_hash(password, salt):
 
 
 def init_database():
-    conn = mysql.connector.connect(**DB_CONFIG)
+    conn = mysql.connector.connect(**build_db_config())
     cursor = conn.cursor()
 
     print("Resetting database 'airline'...")
@@ -390,11 +400,16 @@ def init_database():
         """
         INSERT INTO Airport (name, city) VALUES
             ('JFK', 'New York'),
+            ('LGA', 'New York'),
             ('LAX', 'Los Angeles'),
+            ('ONT', 'Los Angeles'),
             ('PVG', 'Shanghai'),
             ('NRT', 'Tokyo'),
+            ('HND', 'Tokyo'),
             ('LHR', 'London'),
-            ('SFO', 'San Francisco')
+            ('LGW', 'London'),
+            ('SFO', 'San Francisco'),
+            ('SJC', 'San Francisco')
         """,
         """
         INSERT INTO Airplane (id, airline_name) VALUES
@@ -418,11 +433,15 @@ def init_database():
             ('SJ101', '2026-05-15 08:00:00', '2026-05-15 11:30:00', 299.00, 'upcoming', 'SkyJet', 1, 'JFK', 'LAX'),
             ('SJ102', '2026-05-16 14:00:00', '2026-05-17 06:00:00', 899.00, 'upcoming', 'SkyJet', 1, 'JFK', 'PVG'),
             ('SJ103', '2026-05-17 10:00:00', '2026-05-17 13:30:00', 320.00, 'upcoming', 'SkyJet', 4, 'LAX', 'SFO'),
+            ('SJ105', '2026-05-17 15:00:00', '2026-05-17 18:30:00', 315.00, 'upcoming', 'SkyJet', 4, 'ONT', 'SJC'),
+            ('SJ106', '2026-05-18 09:00:00', '2026-05-18 12:30:00', 305.00, 'upcoming', 'SkyJet', 4, 'LGA', 'LAX'),
             ('SJ900', '2026-05-12 12:00:00', '2026-05-12 15:00:00', 199.00, 'upcoming', 'SkyJet', 5, 'JFK', 'SFO'),
             ('AA201', '2026-05-15 09:00:00', '2026-05-15 22:00:00', 750.00, 'upcoming', 'AirAsia', 2, 'LAX', 'NRT'),
             ('AA202', '2026-05-18 11:00:00', '2026-05-19 05:00:00', 680.00, 'upcoming', 'AirAsia', 2, 'NRT', 'PVG'),
+            ('AA204', '2026-05-19 13:00:00', '2026-05-20 02:00:00', 720.00, 'upcoming', 'AirAsia', 2, 'ONT', 'HND'),
             ('DL301', '2026-05-16 07:00:00', '2026-05-16 15:00:00', 550.00, 'upcoming', 'Delta', 3, 'JFK', 'LHR'),
             ('DL302', '2026-05-20 16:00:00', '2026-05-20 19:30:00', 275.00, 'upcoming', 'Delta', 3, 'LAX', 'JFK'),
+            ('DL303', '2026-05-21 10:00:00', '2026-05-21 18:00:00', 565.00, 'upcoming', 'Delta', 3, 'LGA', 'LGW'),
             ('SJ104', '2026-04-30 09:00:00', '2026-04-30 13:00:00', 310.00, 'in-progress', 'SkyJet', 1, 'SFO', 'JFK'),
             ('AA203', '2026-05-13 10:00:00', '2026-05-13 14:00:00', 420.00, 'delayed', 'AirAsia', 2, 'PVG', 'NRT')
         """,

@@ -6,6 +6,7 @@ import secrets
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
+from pathlib import Path
 
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 import mysql.connector
@@ -23,6 +24,7 @@ PRICE_MULTIPLIERS = {
 }
 STAFF_PERMISSIONS = ("admin", "operator")
 FLIGHT_STATUSES = ("upcoming", "in-progress", "delayed")
+DEFAULT_XAMPP_SOCKET = Path("/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
 
 
 app = Flask(__name__)
@@ -33,19 +35,25 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(hours=2),
 )
 
-DB_CONFIG = {
-    "host": os.getenv("AIRLINE_DB_HOST", "localhost"),
-    "user": os.getenv("AIRLINE_DB_USER", "root"),
-    "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
-    "database": os.getenv("AIRLINE_DB_NAME", "airline"),
-}
-DB_UNIX_SOCKET = os.getenv("AIRLINE_DB_UNIX_SOCKET", "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
-if DB_UNIX_SOCKET:
-    DB_CONFIG["unix_socket"] = DB_UNIX_SOCKET
+def build_db_config():
+    config = {
+        "host": os.getenv("AIRLINE_DB_HOST", "127.0.0.1"),
+        "user": os.getenv("AIRLINE_DB_USER", "root"),
+        "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
+        "database": os.getenv("AIRLINE_DB_NAME", "airline"),
+    }
+
+    db_unix_socket = os.getenv("AIRLINE_DB_UNIX_SOCKET")
+    if db_unix_socket:
+        config["unix_socket"] = db_unix_socket
+    elif DEFAULT_XAMPP_SOCKET.exists():
+        config["unix_socket"] = str(DEFAULT_XAMPP_SOCKET)
+
+    return config
 
 
 def get_db_connection():
-    return mysql.connector.connect(**DB_CONFIG)
+    return mysql.connector.connect(**build_db_config())
 
 
 def csrf_token():
@@ -390,7 +398,7 @@ def fetch_staff_permissions(cursor, username):
     return [row["permission"] for row in cursor.fetchall()]
 
 
-def collect_flight_filters(values):
+def collect_flight_filters(values, cursor=None):
     filters = {
         "departure_airport": normalize_airport_code(values.get("departure_airport")),
         "departure_city": clean_text(values.get("departure_city")),
@@ -404,6 +412,27 @@ def collect_flight_filters(values):
         parse_date_value(filters["departure_date"], "Departure date")
     if filters["departure_airport"] and filters["arrival_airport"] and filters["departure_airport"] == filters["arrival_airport"]:
         raise ValueError("Departure and arrival airports cannot be the same.")
+
+    # Validate airport-city consistency if cursor is provided
+    if cursor:
+        if filters["departure_airport"] and filters["departure_city"]:
+            cursor.execute(
+                "SELECT city FROM Airport WHERE name = %s",
+                (filters["departure_airport"],)
+            )
+            airport_result = cursor.fetchone()
+            if airport_result and airport_result["city"] != filters["departure_city"]:
+                raise ValueError(f"Departure airport {filters['departure_airport']} is not in {filters['departure_city']}.")
+
+        if filters["arrival_airport"] and filters["arrival_city"]:
+            cursor.execute(
+                "SELECT city FROM Airport WHERE name = %s",
+                (filters["arrival_airport"],)
+            )
+            airport_result = cursor.fetchone()
+            if airport_result and airport_result["city"] != filters["arrival_city"]:
+                raise ValueError(f"Arrival airport {filters['arrival_airport']} is not in {filters['arrival_city']}.")
+
     return filters
 
 
@@ -1038,10 +1067,10 @@ def flights():
     airlines = []
 
     try:
-        parsed_filters = collect_flight_filters(filters)
         conn = get_db_connection()
         cursor = dict_cursor(conn)
         airports, cities, airlines = load_reference_data(cursor)
+        parsed_filters = collect_flight_filters(filters, cursor)
 
         restrict_airlines = None
         if current_role() == "booking_agent":

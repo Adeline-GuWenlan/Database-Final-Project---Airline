@@ -4,9 +4,9 @@
 
 {% block content %}
 <section class="hero">
-    <span class="eyebrow">Structured Search</span>
-    <h1>Find upcoming flights using airports, cities, dates, and airline filters.</h1>
-    <p>Search is constrained to future flights and uses exact filter fields rather than free-form SQL-like input.</p>
+    <span class="eyebrow">Flight Search & Status Lookup</span>
+    <h1>Find flights by route, date, airline, or flight number.</h1>
+    <p>Search for upcoming flights or check the status of any flight. No login required.</p>
 </section>
 
 <section class="card">
@@ -67,6 +67,21 @@
                 <option value="{{ airline }}" {% if filters.airline_name==airline %}selected{% endif %}>{{ airline }}
                 </option>
                 {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="flight_num">Flight Number</label>
+            <input id="flight_num" type="text" name="flight_num" value="{{ filters.flight_num }}" placeholder="e.g., SJ101">
+        </div>
+
+        <div>
+            <label for="status">Flight Status</label>
+            <select id="status" name="status">
+                <option value="">Any status (future flights)</option>
+                <option value="upcoming" {% if filters.status=='upcoming' %}selected{% endif %}>Upcoming</option>
+                <option value="in-progress" {% if filters.status=='in-progress' %}selected{% endif %}>In Progress</option>
+                <option value="delayed" {% if filters.status=='delayed' %}selected{% endif %}>Delayed</option>
             </select>
         </div>
 

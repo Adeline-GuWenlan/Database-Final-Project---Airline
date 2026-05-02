@@ -492,7 +492,6 @@
             <a href="{{ url_for('index') }}" class="brand">Air Ticket Reservation</a>
             <div class="nav">
                 <a href="{{ url_for('flights') }}">Search Flights</a>
-                <a href="{{ url_for('status_lookup') }}">Flight Status</a>
                 {% if session.get('role') == 'customer' %}
                 <a href="{{ url_for('customer_portal') }}">Customer Dashboard</a>
                 <a href="{{ url_for('saved_flights') }}">Saved Flights</a>

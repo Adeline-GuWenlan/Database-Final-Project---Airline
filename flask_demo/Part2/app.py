@@ -406,6 +406,8 @@ def collect_flight_filters(values, cursor=None):
         "arrival_city": clean_text(values.get("arrival_city")),
         "departure_date": clean_text(values.get("departure_date")),
         "airline_name": clean_text(values.get("airline_name")),
+        "flight_num": normalize_flight_num(values.get("flight_num")),
+        "status": clean_text(values.get("status")),
     }
 
     if filters["departure_date"]:
@@ -454,10 +456,18 @@ def get_public_flights(cursor, filters, restrict_airlines=None):
         FROM Flight f
         JOIN Airport dep ON dep.name = f.departure_airport
         JOIN Airport arr ON arr.name = f.arrival_airport
-        WHERE f.departure_time >= NOW()
-          AND f.status IN ('upcoming', 'delayed')
+        WHERE 1=1
     """
     params = []
+
+    # If status filter is provided, use it; otherwise default to upcoming flights
+    if filters.get("status"):
+        if filters["status"] in FLIGHT_STATUSES:
+            query += " AND f.status = %s"
+            params.append(filters["status"])
+    else:
+        # Default: show future flights with upcoming or delayed status
+        query += " AND f.departure_time >= NOW() AND f.status IN ('upcoming', 'delayed')"
 
     if filters["departure_airport"]:
         query += " AND f.departure_airport = %s"
@@ -474,6 +484,9 @@ def get_public_flights(cursor, filters, restrict_airlines=None):
     if filters["departure_date"]:
         query += " AND DATE(f.departure_time) = %s"
         params.append(filters["departure_date"])
+    if filters["flight_num"]:
+        query += " AND f.flight_num = %s"
+        params.append(filters["flight_num"])
     if filters["airline_name"]:
         query += " AND f.airline_name = %s"
         params.append(filters["airline_name"])
@@ -1001,53 +1014,15 @@ def register():
 
 @app.route("/status")
 def status_lookup():
-    result = None
-    filters = {
-        "airline_name": clean_text(request.args.get("airline_name")),
-        "flight_num": normalize_flight_num(request.args.get("flight_num")),
-    }
+    """
+    Redirect to the unified flight search page.
+    Status lookup is now integrated into the main flight search.
+    """
+    airline_name = request.args.get("airline_name", "")
+    flight_num = request.args.get("flight_num", "")
 
-    try:
-        conn = get_db_connection()
-        cursor = dict_cursor(conn)
-        _, _, airlines = load_reference_data(cursor)
-
-        if filters["airline_name"] or filters["flight_num"]:
-            if filters["airline_name"] not in airlines:
-                raise ValueError("Please select a valid airline.")
-            flight_num = validate_flight_num(filters["flight_num"])
-            cursor.execute(
-                """
-                SELECT
-                    f.flight_num,
-                    f.airline_name,
-                    f.status,
-                    f.departure_time,
-                    f.arrival_time,
-                    f.departure_airport,
-                    dep.city AS departure_city,
-                    f.arrival_airport,
-                    arr.city AS arrival_city
-                FROM Flight f
-                JOIN Airport dep ON dep.name = f.departure_airport
-                JOIN Airport arr ON arr.name = f.arrival_airport
-                WHERE f.airline_name = %s
-                  AND f.flight_num = %s
-                  AND f.status = 'in-progress'
-                """,
-                (filters["airline_name"], flight_num),
-            )
-            result = cursor.fetchone()
-            if not result:
-                flash("No in-progress flight matched that airline and flight number.", "error")
-
-        cursor.close()
-        conn.close()
-    except (ValueError, Error) as exc:
-        flash(str(exc), "error")
-        airlines = []
-
-    return render_template("status.html", airlines=airlines, result=result, filters=filters)
+    # Redirect to flights page with status=in-progress if they were looking for status
+    return redirect(url_for("flights", airline_name=airline_name, flight_num=flight_num, status="in-progress"))
 
 
 @app.route("/flights")
@@ -1059,6 +1034,8 @@ def flights():
         "arrival_city": request.args.get("arrival_city", ""),
         "departure_date": request.args.get("departure_date", ""),
         "airline_name": request.args.get("airline_name", ""),
+        "flight_num": request.args.get("flight_num", ""),
+        "status": request.args.get("status", ""),
     }
 
     flights_data = []

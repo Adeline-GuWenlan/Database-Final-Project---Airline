@@ -39,6 +39,9 @@ DB_CONFIG = {
     "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
     "database": os.getenv("AIRLINE_DB_NAME", "airline"),
 }
+DB_UNIX_SOCKET = os.getenv("AIRLINE_DB_UNIX_SOCKET", "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
+if DB_UNIX_SOCKET:
+    DB_CONFIG["unix_socket"] = DB_UNIX_SOCKET
 
 
 def get_db_connection():
@@ -1275,6 +1278,8 @@ def customer_portal():
         query += " ORDER BY f.departure_time, t.ticket_id"
         cursor.execute(query, params)
         purchases = cursor.fetchall()
+        for purchase in purchases:
+            purchase["can_cancel"] = purchase["departure_time"] > datetime.now()
 
         spending = get_customer_spending(
             cursor,
@@ -1300,6 +1305,114 @@ def customer_portal():
 @roles_required("customer")
 def my_purchases():
     return redirect(url_for("customer_portal"))
+
+
+@app.route("/saved-flights/save/<flight_num>", methods=["POST"])
+@roles_required("customer")
+def save_flight(flight_num):
+    flight_number = validate_flight_num(flight_num)
+    customer_email = session["customer_email"]
+
+    try:
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+
+        # Check if flight exists and is upcoming
+        cursor.execute(
+            "SELECT flight_num FROM Flight WHERE flight_num = %s AND departure_time >= NOW()",
+            (flight_number,),
+        )
+        if not cursor.fetchone():
+            flash("Flight not found or has already departed.", "error")
+            cursor.close()
+            conn.close()
+            return redirect(request.referrer or url_for("flights"))
+
+        # Insert into SavedFlight
+        cursor.execute(
+            "INSERT INTO SavedFlight (customer_email, flight_num) VALUES (%s, %s)",
+            (customer_email, flight_number),
+        )
+        conn.commit()
+        flash("Flight saved successfully.", "success")
+    except mysql.connector.IntegrityError:
+        flash("This flight is already saved.", "error")
+    except Error as exc:
+        flash(str(exc), "error")
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+    return redirect(request.referrer or url_for("flights"))
+
+
+@app.route("/saved-flights")
+@roles_required("customer")
+def saved_flights():
+    customer_email = session["customer_email"]
+    saved_flights = []
+
+    try:
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+        cursor.execute(
+            """
+            SELECT
+                sf.saved_at,
+                f.flight_num,
+                f.airline_name,
+                f.departure_airport,
+                dep.city AS departure_city,
+                f.arrival_airport,
+                arr.city AS arrival_city,
+                f.departure_time,
+                f.arrival_time,
+                f.price,
+                f.status
+            FROM SavedFlight sf
+            JOIN Flight f ON sf.flight_num = f.flight_num
+            JOIN Airport dep ON dep.name = f.departure_airport
+            JOIN Airport arr ON arr.name = f.arrival_airport
+            WHERE sf.customer_email = %s
+            ORDER BY sf.saved_at DESC
+            """,
+            (customer_email,),
+        )
+        saved_flights = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Error as exc:
+        flash(str(exc), "error")
+
+    return render_template("saved_flights.html", saved_flights=saved_flights)
+
+
+@app.route("/saved-flights/remove/<flight_num>", methods=["POST"])
+@roles_required("customer")
+def remove_saved_flight(flight_num):
+    flight_number = validate_flight_num(flight_num)
+    customer_email = session["customer_email"]
+
+    try:
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+        cursor.execute(
+            "DELETE FROM SavedFlight WHERE customer_email = %s AND flight_num = %s",
+            (customer_email, flight_number),
+        )
+        if cursor.rowcount > 0:
+            conn.commit()
+            flash("Flight removed from saved list.", "success")
+        else:
+            flash("Flight not found in your saved list.", "error")
+        cursor.close()
+        conn.close()
+    except Error as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("saved_flights"))
 
 
 @app.route("/agent")
@@ -1785,6 +1898,56 @@ def logout():
 @app.errorhandler(400)
 def bad_request(_error):
     return render_template("error.html", title="Bad Request", error="The request could not be verified."), 400
+
+
+@app.route("/cancel_booking/<int:ticket_id>", methods=["POST"])
+@roles_required("customer")
+def cancel_booking(ticket_id):
+    conn = None
+    cursor = None
+    try:
+        customer_email = session["customer_email"]
+
+        conn = get_db_connection()
+        conn.start_transaction()
+        cursor = dict_cursor(conn)
+
+        cursor.execute(
+            """
+            SELECT t.ticket_id, t.flight_num, f.departure_time
+            FROM Purchases p
+            JOIN Ticket t ON t.ticket_id = p.ticket_id
+            JOIN Flight f ON f.flight_num = t.flight_num
+            WHERE p.ticket_id = %s AND p.customer_email = %s
+            FOR UPDATE
+            """,
+            (ticket_id, customer_email),
+        )
+        booking = cursor.fetchone()
+
+        if not booking:
+            flash("Booking not found or you do not have permission to cancel it.", "error")
+        elif booking["departure_time"] <= datetime.now():
+            flash("Cannot cancel bookings for flights that have already departed.", "error")
+        else:
+            cursor.execute(
+                "DELETE FROM Ticket WHERE ticket_id = %s",
+                (ticket_id,),
+            )
+            flash(f"Booking #{ticket_id} for flight {booking['flight_num']} has been successfully cancelled.", "success")
+
+        conn.commit()
+    except Error as exc:
+        if conn:
+            conn.rollback()
+        flash(f"Error cancelling booking: {str(exc)}", "error")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+    return redirect(url_for("customer_portal"))
 
 
 @app.errorhandler(403)

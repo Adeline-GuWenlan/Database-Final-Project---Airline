@@ -1,13 +1,17 @@
 import hashlib
+import os
 
 import mysql.connector
 
 
 DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "password": "",
+    "host": os.getenv("AIRLINE_DB_HOST", "localhost"),
+    "user": os.getenv("AIRLINE_DB_USER", "root"),
+    "password": os.getenv("AIRLINE_DB_PASSWORD", ""),
 }
+DB_UNIX_SOCKET = os.getenv("AIRLINE_DB_UNIX_SOCKET", "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
+if DB_UNIX_SOCKET:
+    DB_CONFIG["unix_socket"] = DB_UNIX_SOCKET
 
 
 def sample_hash(password, salt):
@@ -158,6 +162,18 @@ def init_database():
             FOREIGN KEY (booking_agent_email) REFERENCES BookingAgent(email)
                 ON DELETE CASCADE ON UPDATE CASCADE,
             FOREIGN KEY (airline_name) REFERENCES Airline(name)
+                ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """,
+        """
+        CREATE TABLE SavedFlight (
+            customer_email VARCHAR(100) NOT NULL,
+            flight_num VARCHAR(10) NOT NULL,
+            saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (customer_email, flight_num),
+            FOREIGN KEY (customer_email) REFERENCES Customer(email)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (flight_num) REFERENCES Flight(flight_num)
                 ON DELETE CASCADE ON UPDATE CASCADE
         )
         """,

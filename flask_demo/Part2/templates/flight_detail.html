@@ -12,31 +12,32 @@
         <span class="tag">Arrive {{ flight.arrival_time|datetime_display }}</span>
         <span class="tag">Base price {{ flight.price|money }}</span>
     </div>
-    <p>{{ flight.departure_airport }} ({{ flight.departure_city }}) to {{ flight.arrival_airport }} ({{ flight.arrival_city }})</p>
+    <p>{{ flight.departure_airport }} ({{ flight.departure_city }}) to {{ flight.arrival_airport }} ({{
+        flight.arrival_city }})</p>
 </section>
 
 <section class="grid grid-2">
     <div class="card">
         <h2>Seat Classes</h2>
         {% if seat_classes %}
-            <div class="form-grid">
-                {% for seat in seat_classes %}
-                    <div class="wide-card" style="margin-top: 0;">
-                        <div class="split">
-                            <div>
-                                <h3 style="margin-bottom: 6px; text-transform: capitalize;">{{ seat.seat_class }}</h3>
-                                <p>{{ seat.remaining }} seats left out of {{ seat.capacity }}.</p>
-                            </div>
-                            <div>
-                                <div class="metric-value">{{ seat.price|money }}</div>
-                                <div class="subtle">charged price</div>
-                            </div>
-                        </div>
+        <div class="form-grid">
+            {% for seat in seat_classes %}
+            <div class="wide-card" style="margin-top: 0;">
+                <div class="split">
+                    <div>
+                        <h3 style="margin-bottom: 6px; text-transform: capitalize;">{{ seat.seat_class }}</h3>
+                        <p>{{ seat.remaining }} seats left out of {{ seat.capacity }}.</p>
                     </div>
-                {% endfor %}
+                    <div>
+                        <div class="metric-value">{{ seat.price|money }}</div>
+                        <div class="subtle">charged price</div>
+                    </div>
+                </div>
             </div>
+            {% endfor %}
+        </div>
         {% else %}
-            <div class="empty">No seat classes were defined for this airplane.</div>
+        <div class="empty">No seat classes were defined for this airplane.</div>
         {% endif %}
     </div>
 
@@ -80,6 +81,13 @@
                     <a class="button" href="{{ url_for('login') }}">Go to Login</a>
                 </div>
             </div>
+        {% endif %}
+
+        {% if session.get('role') == 'customer' %}
+            <form method="post" action="{{ url_for('save_flight', flight_num=flight.flight_num) }}" style="margin-top: 16px;">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="button accent">Save This Flight</button>
+            </form>
         {% endif %}
     </div>
 </section>

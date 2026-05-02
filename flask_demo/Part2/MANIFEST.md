@@ -7,7 +7,7 @@
 - `templates/base.html`: Shared layout, navigation, alerts, and styling used by all active pages.
 - `templates/index.html`: Public landing page with system overview and featured flights.
 - `templates/login.html`: Unified login page for customers, booking agents, and airline staff.
-- `templates/register.html`: Unified registration page with role-specific fields and validations.
+- `templates/register.html`: Customer and booking-agent registration page with role-specific validations.
 - `templates/flights.html`: Structured public flight search page.
 - `templates/status.html`: Public flight-status lookup for in-progress flights.
 - `templates/flight_detail.html`: Flight detail page with seat-class-aware booking form.
@@ -19,14 +19,15 @@
 
 ## Database Files
 
-- `create_tables.sql`: Refined schema definitions, indexes, and integrity triggers.
-- `insert_data.sql`: Sample data with hashed passwords and future-facing test records.
-- `/Volumes/Adeline/DataBase_FP/flask_demo/init_db.py`: Shared MySQL initializer that creates the schema and inserts sample data programmatically.
+- `create_tables.sql`: Refined schema definitions, indexes, integrity triggers, and the `purchase_ticket` stored procedure.
+- `insert_data.sql`: Sample data with hashed passwords, future-facing test records, and required demo accounts.
+- `../init_db.py`: Shared MySQL initializer that creates the schema and inserts sample data programmatically.
 - `select_queries_with_results.sql`: Representative SQL queries used by the refined app.
 
 ## Documentation Files
 
 - `README.md`: Setup guide and high-level overview of the refined Part 3 application.
+- `SECURITY_AND_DEMO.md`: SQL-injection/security explanation, role-by-role controls, stored procedure/trigger notes, credentials, and demo script.
 - `FEATURE_QUERY_MAP.md`: Mapping from user-facing functionality to the database queries it issues.
 - `System_Optimization_Proposals.md`: Narrative document responding to the optimization prompt and tying changes back to the rubric.
 - `deviation_note.txt`: Existing note file retained from prior work.

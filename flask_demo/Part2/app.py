@@ -14,6 +14,8 @@ from mysql.connector import Error
 
 PASSWORD_MIN_LENGTH = 8
 COMMISSION_RATE = Decimal("0.10")
+CSRF_FIELD_NAME = "_csrf_token"
+CSRF_SESSION_KEY = "_csrf_token"
 PRICE_MULTIPLIERS = {
     "economy": Decimal("1.00"),
     "business": Decimal("1.50"),
@@ -41,6 +43,29 @@ DB_CONFIG = {
 
 def get_db_connection():
     return mysql.connector.connect(**DB_CONFIG)
+
+
+def csrf_token():
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.before_request
+def protect_post_requests():
+    if request.method != "POST":
+        return None
+
+    expected = session.get(CSRF_SESSION_KEY)
+    submitted = request.form.get(CSRF_FIELD_NAME, "")
+    if not expected or not hmac.compare_digest(expected, submitted):
+        abort(400)
+    return None
 
 
 def dict_cursor(connection):
@@ -872,6 +897,9 @@ def register():
             password = validate_password(request.form.get("password", ""), request.form.get("confirm_password", ""))
             hashed = hash_password(password)
 
+            if role == "airline_staff":
+                raise ValueError("Staff and admin accounts are provisioned in the database; public self-registration is disabled.")
+
             if role == "customer":
                 email = validate_email(form_data["email"])
                 name = validate_name(form_data["name"], "Full name")
@@ -921,48 +949,6 @@ def register():
                     authorized_airlines=[],
                 )
 
-            elif role == "airline_staff":
-                username = validate_username(form_data["username"])
-                first_name = validate_name(form_data["first_name"], "First name")
-                last_name = validate_name(form_data["last_name"], "Last name")
-                airline_name = clean_text(form_data["airline_name"])
-                date_of_birth = (
-                    parse_date_value(form_data["staff_date_of_birth"], "Date of birth")
-                    if form_data["staff_date_of_birth"]
-                    else None
-                )
-                permissions = [permission for permission in form_data["permissions"] if permission in STAFF_PERMISSIONS]
-                if airline_name not in airlines:
-                    raise ValueError("Please choose a valid airline for staff registration.")
-                if not permissions:
-                    raise ValueError("Staff registration requires at least one permission.")
-
-                cursor.execute("SELECT 1 FROM AirlineStaff WHERE username = %s", (username,))
-                if cursor.fetchone():
-                    raise ValueError("That staff username is already registered.")
-
-                cursor.execute(
-                    """
-                    INSERT INTO AirlineStaff (
-                        username, airline_name, password, first_name, last_name, date_of_birth
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (username, airline_name, hashed, first_name, last_name, date_of_birth),
-                )
-                for permission in permissions:
-                    cursor.execute(
-                        "INSERT INTO StaffPermission (username, permission) VALUES (%s, %s)",
-                        (username, permission),
-                    )
-                conn.commit()
-                login_user(
-                    "airline_staff",
-                    username,
-                    f"{first_name} {last_name}",
-                    airline_name=airline_name,
-                    permissions=sorted(set(permissions)),
-                )
             else:
                 raise ValueError("Please choose a valid account type.")
 
@@ -1180,90 +1166,24 @@ def book_ticket():
         conn = get_db_connection()
         conn.start_transaction()
         cursor = dict_cursor(conn)
-
         cursor.execute(
-            """
-            SELECT flight_num, airline_name, airplane_id, price, status, departure_time
-            FROM Flight
-            WHERE flight_num = %s
-            FOR UPDATE
-            """,
-            (flight_num,),
+            "CALL purchase_ticket(%s, %s, %s, %s)",
+            (flight_num, seat_class, customer_email, booking_agent_email),
         )
-        flight = cursor.fetchone()
-        if not flight:
-            raise ValueError("That flight no longer exists.")
-        if flight["status"] not in ("upcoming", "delayed"):
-            raise ValueError("This flight is not open for booking.")
-        if flight["departure_time"] <= datetime.now():
-            raise ValueError("This flight has already departed and cannot be booked.")
-
-        if booking_agent_email:
-            cursor.execute(
-                """
-                SELECT 1
-                FROM AuthorizedBy
-                WHERE booking_agent_email = %s AND airline_name = %s
-                """,
-                (booking_agent_email, flight["airline_name"]),
-            )
-            if not cursor.fetchone():
-                raise ValueError("This booking agent is not authorized to sell tickets for that airline.")
-            cursor.execute("SELECT 1 FROM Customer WHERE email = %s", (customer_email,))
-            if not cursor.fetchone():
-                raise ValueError("Customer email was not found.")
-
-        cursor.execute(
-            """
-            SELECT capacity
-            FROM SeatClass
-            WHERE airplane_id = %s AND seat_class = %s
-            FOR UPDATE
-            """,
-            (flight["airplane_id"], seat_class),
-        )
-        seat_row = cursor.fetchone()
-        if not seat_row:
-            raise ValueError("That seat class is not available for this airplane.")
-
-        cursor.execute(
-            """
-            SELECT COUNT(*) AS booked
-            FROM Ticket
-            WHERE flight_num = %s AND seat_class = %s
-            """,
-            (flight_num, seat_class),
-        )
-        booked = cursor.fetchone()["booked"]
-        if booked >= seat_row["capacity"]:
-            raise ValueError("No seats remain in the selected class.")
-
-        price = calculate_ticket_price(flight["price"], seat_class)
-        cursor.execute(
-            """
-            INSERT INTO Ticket (flight_num, seat_class, airplane_id, price_charged)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (flight_num, seat_class, flight["airplane_id"], price),
-        )
-        ticket_id = cursor.lastrowid
-
-        cursor.execute(
-            """
-            INSERT INTO Purchases (ticket_id, customer_email, booking_agent_email, purchase_date)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (ticket_id, customer_email, booking_agent_email, date.today()),
-        )
+        purchase_result = cursor.fetchone()
+        while cursor.nextset():
+            pass
+        if not purchase_result:
+            raise ValueError("Ticket purchase procedure did not return a result.")
 
         conn.commit()
         booking_context = {
             "success": True,
-            "message": "Booking confirmed. Server-side capacity checks and pricing were applied successfully.",
-            "ticket_id": ticket_id,
+            "message": "Booking confirmed. The database stored procedure created the ticket and applied trigger-backed capacity checks.",
+            "ticket_id": purchase_result["ticket_id"],
             "flight_num": flight_num,
             "seat_class": seat_class,
-            "price": price,
+            "price": purchase_result["price_charged"],
             "customer_email": customer_email,
             "booking_agent_email": booking_agent_email,
         }
@@ -1856,8 +1776,15 @@ def update_flight_status():
 @app.route("/logout")
 def logout():
     session.clear()
-    flash("You have been signed out.", "success")
-    return redirect(url_for("index"))
+    response = redirect(url_for("index"))
+    response.delete_cookie(app.config.get("SESSION_COOKIE_NAME", "session"), path="/")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.errorhandler(400)
+def bad_request(_error):
+    return render_template("error.html", title="Bad Request", error="The request could not be verified."), 400
 
 
 @app.errorhandler(403)

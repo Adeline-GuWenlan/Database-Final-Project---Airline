@@ -13,6 +13,7 @@
     <div class="card">
         <h2>Login</h2>
         <form method="post" class="form-grid">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label for="role">Account Type</label>
                 <select id="role" name="role">
@@ -44,7 +45,9 @@
         <p>These sample credentials work after the database initializer is run.</p>
         <div class="tag-row">
             <span class="tag">Customer: alice@example.com / password123</span>
+            <span class="tag">Customer: bob@example.com / password123</span>
             <span class="tag">Booking agent: agent1@travel.com / agentpass</span>
+            <span class="tag">Admin: admin_skyjet / adminpass</span>
             <span class="tag">Staff: staff_skyjet / staffpass</span>
         </div>
         <p class="subtle">The app can also transparently upgrade old plain-text demo passwords to hashes on successful login.</p>

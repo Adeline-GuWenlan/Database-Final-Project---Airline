@@ -60,3 +60,6 @@ WHERE f.airline_name = 'SkyJet'
   AND f.departure_time >= NOW()
   AND f.departure_time <= DATE_ADD(NOW(), INTERVAL 30 DAY)
 ORDER BY f.departure_time, f.flight_num;
+
+-- 6. Stored procedure used for customer or agent ticket purchase
+CALL purchase_ticket('SJ101', 'economy', 'bob@example.com', NULL);

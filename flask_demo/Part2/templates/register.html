@@ -5,19 +5,19 @@
 {% block content %}
 <section class="hero">
     <span class="eyebrow">Registration</span>
-    <h1>Create a customer, booking-agent, or airline-staff account.</h1>
+    <h1>Create a customer or booking-agent account.</h1>
     <p>Every registration path uses server-side validation and stores passwords as hashes instead of plain text.</p>
 </section>
 
 <section class="card">
     <h2>Registration Form</h2>
     <form method="post" class="form-grid">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div>
             <label for="role">Account Type</label>
             <select id="role" name="role">
                 <option value="customer" {% if form_data.role == 'customer' %}selected{% endif %}>Customer</option>
                 <option value="booking_agent" {% if form_data.role == 'booking_agent' %}selected{% endif %}>Booking Agent</option>
-                <option value="airline_staff" {% if form_data.role == 'airline_staff' %}selected{% endif %}>Airline Staff</option>
             </select>
         </div>
 

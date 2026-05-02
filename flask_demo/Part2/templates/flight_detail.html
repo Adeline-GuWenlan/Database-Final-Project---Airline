@@ -44,6 +44,7 @@
         <h2>Booking</h2>
         {% if can_book and agent_can_book and bookable_seat_classes %}
             <form method="post" action="{{ url_for('book_ticket') }}" class="form-grid">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="flight_num" value="{{ flight.flight_num }}">
 
                 <div>

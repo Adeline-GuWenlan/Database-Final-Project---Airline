@@ -205,16 +205,34 @@ CREATE TRIGGER enforce_ticket_capacity
 BEFORE INSERT ON Ticket
 FOR EACH ROW
 BEGIN
+    DECLARE flight_airplane_id INT DEFAULT NULL;
+    DECLARE flight_count INT DEFAULT 0;
     DECLARE seat_capacity INT DEFAULT NULL;
+    DECLARE seat_class_count INT DEFAULT 0;
     DECLARE booked_count INT DEFAULT 0;
 
-    SELECT capacity
-    INTO seat_capacity
+    SELECT COUNT(*), MAX(airplane_id)
+    INTO flight_count, flight_airplane_id
+    FROM Flight
+    WHERE flight_num = NEW.flight_num;
+
+    IF flight_count = 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Flight does not exist for this ticket.';
+    END IF;
+
+    IF flight_airplane_id <> NEW.airplane_id THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Ticket airplane must match the flight airplane.';
+    END IF;
+
+    SELECT COUNT(*), MAX(capacity)
+    INTO seat_class_count, seat_capacity
     FROM SeatClass
     WHERE airplane_id = NEW.airplane_id
       AND seat_class = NEW.seat_class;
 
-    IF seat_capacity IS NULL THEN
+    IF seat_class_count = 0 THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Seat class is not configured for this airplane.';
     END IF;
@@ -229,6 +247,127 @@ BEGIN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Seat capacity has been reached for this class.';
     END IF;
+END//
+
+CREATE PROCEDURE purchase_ticket(
+    IN p_flight_num VARCHAR(10),
+    IN p_seat_class VARCHAR(20),
+    IN p_customer_email VARCHAR(100),
+    IN p_booking_agent_email VARCHAR(100)
+)
+BEGIN
+    DECLARE v_airline_name VARCHAR(50);
+    DECLARE v_airplane_id INTEGER;
+    DECLARE v_base_price DECIMAL(10,2);
+    DECLARE v_status VARCHAR(20);
+    DECLARE v_departure_time DATETIME;
+    DECLARE v_flight_count INT DEFAULT 0;
+    DECLARE v_customer_count INT DEFAULT 0;
+    DECLARE v_seat_count INT DEFAULT 0;
+    DECLARE v_authorized_count INT DEFAULT 0;
+    DECLARE v_capacity INT DEFAULT 0;
+    DECLARE v_booked_count INT DEFAULT 0;
+    DECLARE v_price_charged DECIMAL(10,2);
+    DECLARE v_ticket_id INT;
+
+    SELECT COUNT(*)
+    INTO v_customer_count
+    FROM Customer
+    WHERE email = p_customer_email;
+
+    IF v_customer_count = 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Customer email was not found.';
+    END IF;
+
+    SELECT COUNT(*)
+    INTO v_flight_count
+    FROM Flight
+    WHERE flight_num = p_flight_num;
+
+    IF v_flight_count = 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'That flight no longer exists.';
+    END IF;
+
+    SELECT airline_name, airplane_id, price, status, departure_time
+    INTO v_airline_name, v_airplane_id, v_base_price, v_status, v_departure_time
+    FROM Flight
+    WHERE flight_num = p_flight_num
+    FOR UPDATE;
+
+    IF v_status NOT IN ('upcoming', 'delayed') THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'This flight is not open for booking.';
+    END IF;
+
+    IF v_departure_time <= NOW() THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'This flight has already departed and cannot be booked.';
+    END IF;
+
+    IF p_booking_agent_email IS NOT NULL THEN
+        SELECT COUNT(*)
+        INTO v_authorized_count
+        FROM AuthorizedBy
+        WHERE booking_agent_email = p_booking_agent_email
+          AND airline_name = v_airline_name;
+
+        IF v_authorized_count = 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'This booking agent is not authorized to sell tickets for that airline.';
+        END IF;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO v_seat_count
+    FROM SeatClass
+    WHERE airplane_id = v_airplane_id
+      AND seat_class = p_seat_class;
+
+    IF v_seat_count = 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'That seat class is not available for this airplane.';
+    END IF;
+
+    SELECT capacity
+    INTO v_capacity
+    FROM SeatClass
+    WHERE airplane_id = v_airplane_id
+      AND seat_class = p_seat_class
+    FOR UPDATE;
+
+    SELECT COUNT(*)
+    INTO v_booked_count
+    FROM Ticket
+    WHERE flight_num = p_flight_num
+      AND seat_class = p_seat_class;
+
+    IF v_booked_count >= v_capacity THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'No seats remain in the selected class.';
+    END IF;
+
+    IF p_seat_class = 'economy' THEN
+        SET v_price_charged = ROUND(v_base_price * 1.00, 2);
+    ELSEIF p_seat_class = 'business' THEN
+        SET v_price_charged = ROUND(v_base_price * 1.50, 2);
+    ELSEIF p_seat_class = 'first' THEN
+        SET v_price_charged = ROUND(v_base_price * 2.50, 2);
+    ELSE
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Please choose a supported seat class.';
+    END IF;
+
+    INSERT INTO Ticket (flight_num, seat_class, airplane_id, price_charged)
+    VALUES (p_flight_num, p_seat_class, v_airplane_id, v_price_charged);
+
+    SET v_ticket_id = LAST_INSERT_ID();
+
+    INSERT INTO Purchases (ticket_id, customer_email, booking_agent_email, purchase_date)
+    VALUES (v_ticket_id, p_customer_email, p_booking_agent_email, CURRENT_DATE());
+
+    SELECT v_ticket_id AS ticket_id, v_price_charged AS price_charged;
 END//
 
 DELIMITER ;

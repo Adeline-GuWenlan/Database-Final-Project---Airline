@@ -378,6 +378,7 @@
         <h2>Admin Actions</h2>
         <h3>Add Airport</h3>
         <form method="post" action="{{ url_for('add_airport') }}" class="form-grid columns-2">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label for="airport_code">Airport Code</label>
                 <input id="airport_code" name="airport_code" placeholder="SZX" required>
@@ -393,6 +394,7 @@
 
         <h3 style="margin-top: 24px;">Associate Booking Agent</h3>
         <form method="post" action="{{ url_for('authorize_agent') }}" class="form-grid">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label for="agent_email">Booking Agent</label>
                 <select id="agent_email" name="agent_email">
@@ -410,6 +412,7 @@
     <div class="card">
         <h2>Add Airplane</h2>
         <form method="post" action="{{ url_for('add_airplane') }}" class="form-grid columns-2">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label for="airplane_id">Airplane ID</label>
                 <input id="airplane_id" name="airplane_id" type="number" min="1" required>
@@ -436,6 +439,7 @@
 <section class="wide-card">
     <h2>Create Flight</h2>
     <form method="post" action="{{ url_for('add_flight') }}" class="form-grid columns-2">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div>
             <label for="flight_num">Flight Number</label>
             <input id="flight_num" name="flight_num" placeholder="SJ210" required>
@@ -489,12 +493,18 @@
         </div>
     </form>
 </section>
+{% else %}
+<section class="wide-card">
+    <h2>Admin Actions Locked</h2>
+    <div class="empty">This staff account does not have admin permission, so airport, airplane, flight, and agent-authorization actions are unavailable.</div>
+</section>
 {% endif %}
 
 {% if 'operator' in permissions %}
 <section class="wide-card">
     <h2>Operator Action: Update Flight Status</h2>
     <form method="post" action="{{ url_for('update_flight_status') }}" class="form-grid columns-2">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div>
             <label for="status_flight_num">Flight Number</label>
             <input id="status_flight_num" name="flight_num" placeholder="SJ101" required>

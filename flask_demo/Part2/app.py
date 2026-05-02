@@ -1969,6 +1969,50 @@ def logout():
     return redirect(url_for("index"))
 
 
+@app.route("/cancel_booking/<int:ticket_id>", methods=["POST"])
+@login_required
+def cancel_booking(ticket_id):
+    """Cancel a customer's ticket booking."""
+    try:
+        customer_email = session.get("customer_email")
+        
+        conn = get_db_connection()
+        cursor = dict_cursor(conn)
+        
+        # Verify ticket belongs to current customer
+        cursor.execute(
+            """
+            SELECT t.flight_num, f.departure_time
+            FROM Purchases p
+            JOIN Ticket t ON t.ticket_id = p.ticket_id
+            JOIN Flight f ON f.flight_num = t.flight_num
+            WHERE p.ticket_id = %s AND p.customer_email = %s
+            """,
+            (ticket_id, customer_email),
+        )
+        booking = cursor.fetchone()
+        
+        if not booking:
+            flash("Booking not found or you do not have permission to cancel it.", "error")
+        elif booking["departure_time"] <= datetime.now():
+            flash("Cannot cancel bookings for flights that have already departed.", "error")
+        else:
+            # Delete from Purchases (cascades to Ticket deletion)
+            cursor.execute(
+                "DELETE FROM Purchases WHERE ticket_id = %s AND customer_email = %s",
+                (ticket_id, customer_email),
+            )
+            conn.commit()
+            flash(f"Booking #{ticket_id} for flight {booking['flight_num']} has been successfully cancelled.", "success")
+        
+        cursor.close()
+        conn.close()
+    except Error as exc:
+        flash(f"Error cancelling booking: {str(exc)}", "error")
+    
+    return redirect(url_for("customer_portal"))
+
+
 @app.errorhandler(403)
 def forbidden(_error):
     return render_template("error.html", title="Access Denied", error="You do not have permission to view that page."), 403

@@ -1177,24 +1177,90 @@ def book_ticket():
         conn = get_db_connection()
         conn.start_transaction()
         cursor = dict_cursor(conn)
+
         cursor.execute(
-            "CALL purchase_ticket(%s, %s, %s, %s)",
-            (flight_num, seat_class, customer_email, booking_agent_email),
+            """
+            SELECT flight_num, airline_name, airplane_id, price, status, departure_time
+            FROM Flight
+            WHERE flight_num = %s
+            FOR UPDATE
+            """,
+            (flight_num,),
         )
-        purchase_result = cursor.fetchone()
-        while cursor.nextset():
-            pass
-        if not purchase_result:
-            raise ValueError("Ticket purchase procedure did not return a result.")
+        flight = cursor.fetchone()
+        if not flight:
+            raise ValueError("That flight no longer exists.")
+        if flight["status"] not in ("upcoming", "delayed"):
+            raise ValueError("This flight is not open for booking.")
+        if flight["departure_time"] <= datetime.now():
+            raise ValueError("This flight has already departed and cannot be booked.")
+
+        if booking_agent_email:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM AuthorizedBy
+                WHERE booking_agent_email = %s AND airline_name = %s
+                """,
+                (booking_agent_email, flight["airline_name"]),
+            )
+            if not cursor.fetchone():
+                raise ValueError("This booking agent is not authorized to sell tickets for that airline.")
+            cursor.execute("SELECT 1 FROM Customer WHERE email = %s", (customer_email,))
+            if not cursor.fetchone():
+                raise ValueError("Customer email was not found.")
+
+        cursor.execute(
+            """
+            SELECT capacity
+            FROM SeatClass
+            WHERE airplane_id = %s AND seat_class = %s
+            FOR UPDATE
+            """,
+            (flight["airplane_id"], seat_class),
+        )
+        seat_row = cursor.fetchone()
+        if not seat_row:
+            raise ValueError("That seat class is not available for this airplane.")
+
+        cursor.execute(
+            """
+            SELECT COUNT(*) AS booked
+            FROM Ticket
+            WHERE flight_num = %s AND seat_class = %s
+            """,
+            (flight_num, seat_class),
+        )
+        booked = cursor.fetchone()["booked"]
+        if booked >= seat_row["capacity"]:
+            raise ValueError("No seats remain in the selected class.")
+
+        price = calculate_ticket_price(flight["price"], seat_class)
+        cursor.execute(
+            """
+            INSERT INTO Ticket (flight_num, seat_class, airplane_id, price_charged)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (flight_num, seat_class, flight["airplane_id"], price),
+        )
+        ticket_id = cursor.lastrowid
+
+        cursor.execute(
+            """
+            INSERT INTO Purchases (ticket_id, customer_email, booking_agent_email, purchase_date)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (ticket_id, customer_email, booking_agent_email, date.today()),
+        )
 
         conn.commit()
         booking_context = {
             "success": True,
-            "message": "Booking confirmed. The database stored procedure created the ticket and applied trigger-backed capacity checks.",
-            "ticket_id": purchase_result["ticket_id"],
+            "message": "Booking confirmed. Server-side capacity checks and pricing were applied successfully.",
+            "ticket_id": ticket_id,
             "flight_num": flight_num,
             "seat_class": seat_class,
-            "price": purchase_result["price_charged"],
+            "price": price,
             "customer_email": customer_email,
             "booking_agent_email": booking_agent_email,
         }

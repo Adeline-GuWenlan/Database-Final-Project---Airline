@@ -787,6 +787,8 @@ def index():
                 "arrival_city": "",
                 "departure_date": "",
                 "airline_name": "",
+                "flight_num": "",
+                "status": "",
             },
         )[:6]
         cursor.close()
@@ -1936,6 +1938,10 @@ def cancel_booking(ticket_id):
         elif booking["departure_time"] <= datetime.now():
             flash("Cannot cancel bookings for flights that have already departed.", "error")
         else:
+            cursor.execute(
+                "DELETE FROM Purchases WHERE ticket_id = %s AND customer_email = %s",
+                (ticket_id, customer_email),
+            )
             cursor.execute(
                 "DELETE FROM Ticket WHERE ticket_id = %s",
                 (ticket_id,),

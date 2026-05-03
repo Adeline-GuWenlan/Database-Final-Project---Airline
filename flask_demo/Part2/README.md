@@ -12,7 +12,7 @@ This Flask + MySQL project refines the airline reservation prototype so it align
 - Customer dashboard with filtered trips and spending analytics
 - Booking-agent dashboard with authorization checks and commission analytics
 - Airline-staff dashboard with operational views, lookups, analytics, admin actions, and operator status updates
-- Database indexes, integrity triggers, and a `purchase_ticket` stored procedure for transactional booking
+- Database indexes, integrity triggers, and transactional booking with row locks
 
 ## Setup
 

@@ -108,17 +108,33 @@ WHERE f.status = 'in-progress'
 ### Purchase Ticket (Customer or Agent for Customer)
 **Interface**: `/book` - Flight number, seat class, customer email (if agent)
 
-**Flask Processing** (`app.py:1155-1211`):
+**Flask Processing** (`app.py:1283-1405`):
 - Validates flight number and seat class
 - Determines customer email (session for customer, form input for agent)
-- Calls **stored procedure** `purchase_ticket()`
+- Opens a transaction and locks the target flight and seat class rows with `FOR UPDATE`
+- Re-checks flight status, departure time, agent authorization, customer existence for agent sales, seat capacity, and price
+- Inserts `Ticket` and `Purchases` rows using parameterized queries
 
-**Database** (`init_db.py:275-390`):
+**Main Booking Query Pattern**:
 ```sql
-CALL purchase_ticket(flight_num, seat_class, customer_email, booking_agent_email)
+SELECT flight_num, airline_name, airplane_id, price, status, departure_time
+FROM Flight
+WHERE flight_num = %s
+FOR UPDATE;
+
+SELECT capacity
+FROM SeatClass
+WHERE airplane_id = %s AND seat_class = %s
+FOR UPDATE;
+
+INSERT INTO Ticket (flight_num, seat_class, airplane_id, price_charged)
+VALUES (%s, %s, %s, %s);
+
+INSERT INTO Purchases (ticket_id, customer_email, booking_agent_email, purchase_date)
+VALUES (%s, %s, %s, %s);
 ```
 
-**Stored Procedure Logic**:
+**Booking Logic**:
 1. **Validates customer exists** in Customer table
 2. **Validates flight exists** and is bookable (status = 'upcoming'/'delayed', departure > NOW())
 3. **Validates booking agent authorization** (if agent booking) via AuthorizedBy table
@@ -133,6 +149,9 @@ CALL purchase_ticket(flight_num, seat_class, customer_email, booking_agent_email
 - Double-checks airplane_id matches flight
 - Verifies seat class is configured for airplane
 - Enforces capacity limits (prevents overbooking)
+
+**Trigger Enforcement** (`enforce_agent_purchase_authorization_insert` trigger):
+- Double-checks direct `Purchases` inserts for booking-agent authorization
 
 ---
 
@@ -806,7 +825,7 @@ SELECT ... FROM ... WHERE ... FOR UPDATE
 
 ### 5. Concurrent Booking
 - Two users try to book the last seat simultaneously
-- Stored procedure with FOR UPDATE lock ensures only one succeeds
+- Booking transaction uses FOR UPDATE locks so only one succeeds
 
 ---
 
@@ -820,11 +839,11 @@ SELECT ... FROM ... WHERE ... FOR UPDATE
 5. **Booking cancellation** (only available for future flights)
 6. **Admin vs Operator permissions** (different staff accounts see different actions)
 7. **Analytics charts** (customer spending, staff ticket sales over time)
-8. **Stored procedure** in action (booking confirmation message mentions it)
+8. **Booking transaction** in action (confirmation message mentions server-side capacity checks)
 
 ### Talk About These Database Features
 1. **Triggers** preventing invalid data (mention flight validation, capacity enforcement, agent authorization)
-2. **Stored procedure** handling complex booking logic atomically
+2. **Transactional booking** handling complex booking logic atomically
 3. **Indexes** making searches fast (demonstrate search speed)
 4. **Foreign key cascades** maintaining referential integrity
 5. **Transaction isolation** preventing race conditions during booking

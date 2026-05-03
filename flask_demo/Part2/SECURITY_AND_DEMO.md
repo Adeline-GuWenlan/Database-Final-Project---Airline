@@ -8,8 +8,8 @@ This project mitigates SQL injection by using MySQL Connector parameter binding 
 
 ## Security Management by Role
 
-- Customer: passwords are PBKDF2-SHA256 hashes, sessions store the authenticated customer email, purchase history is filtered by that session email, and ticket purchase uses a stored procedure that validates the customer before inserting a ticket.
-- Booking agent: the session stores the authenticated agent email and authorized airlines. Searches are restricted to those airlines, `purchase_ticket` re-checks `AuthorizedBy` before allowing agent sales, and the agent dashboard/analytics join `AuthorizedBy` so the logged-in agent only sees currently authorized airline sales.
+- Customer: passwords are PBKDF2-SHA256 hashes, sessions store the authenticated customer email, purchase history is filtered by that session email, and ticket purchase runs inside a transaction that validates the flight before inserting a ticket.
+- Booking agent: the session stores the authenticated agent email and authorized airlines. Searches are restricted to those airlines, `/book` re-checks `AuthorizedBy` before allowing agent sales, and the agent dashboard/analytics join `AuthorizedBy` so the logged-in agent only sees currently authorized airline sales.
 - Regular staff: staff login loads airline and permissions from `StaffPermission`. A staff user with only `operator` permission cannot see admin forms, and admin POST attempts are rejected before any insert.
 - Admin staff: admin-only endpoints can add airports, add airplanes, create flights, and authorize booking agents. Airplanes and flights are tied to the admin's airline on the server side.
 - All POST forms: CSRF tokens are required for login, registration, booking, and staff actions, which prevents a third-party page from silently submitting state-changing requests through a logged-in browser.
@@ -33,7 +33,8 @@ The app uses sessions for access control and uses cache headers only to prevent 
 
 ## Stored Procedures and Triggers
 
-- `purchase_ticket`: stored procedure used by the Flask `/book` route. It validates customer existence, flight status, departure time, booking-agent authorization, seat-class availability, and remaining capacity. It then creates both `Ticket` and `Purchases` rows in one transaction and returns the new ticket id and price.
+- `/book` transaction: validates customer existence for agent sales, flight status, departure time, booking-agent authorization, seat-class availability, and remaining capacity. It then creates both `Ticket` and `Purchases` rows in one transaction.
+- `purchase_ticket`: retained in the schema as the equivalent database-side booking procedure for reference/demo discussion.
 - `validate_flight_insert` and `validate_flight_update`: reject same-airport routes and arrival times that are not later than departure times.
 - `enforce_ticket_capacity`: rejects ticket inserts that use the wrong airplane for the flight, an unavailable seat class, or a seat class whose capacity has already been reached.
 - `enforce_agent_purchase_authorization_insert` and `enforce_agent_purchase_authorization_update`: reject direct `Purchases` inserts/updates where a booking agent is attached to a flight from an unauthorized airline.
@@ -62,4 +63,4 @@ Run `python init_db.py` from `flask_demo/Part2` before the demo.
 6. Create a new flight: as `SkyJet_admin`, create a future SkyJet flight using the new airplane, different departure/arrival airports, and a future schedule.
 7. Purchase as customer: log in as `alice@example.com` or `bob@example.com`, search future flights, and book an available seat.
 8. Purchase as agent: log in as `agent1@travel.com`, choose a SkyJet flight, enter a customer email, and book on that customer's behalf.
-9. Ticket-limit check: search flight `SJ900`. It uses airplane `5` with one economy seat, and that seat is already sold. The detail page shows it is sold out; any direct purchase attempt is rejected by the stored procedure and trigger-backed capacity checks.
+9. Ticket-limit check: search flight `SJ900`. It uses airplane `5` with one economy seat, and that seat is already sold. The detail page shows it is sold out; any direct purchase attempt is rejected by transaction checks and trigger-backed capacity checks.

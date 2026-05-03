@@ -273,6 +273,72 @@ def init_database():
         END
         """,
         """
+        CREATE TRIGGER enforce_agent_purchase_authorization_insert
+        BEFORE INSERT ON Purchases
+        FOR EACH ROW
+        BEGIN
+            DECLARE ticket_count INT DEFAULT 0;
+            DECLARE ticket_airline VARCHAR(50);
+            DECLARE authorized_count INT DEFAULT 0;
+
+            IF NEW.booking_agent_email IS NOT NULL THEN
+                SELECT COUNT(*), MAX(f.airline_name)
+                INTO ticket_count, ticket_airline
+                FROM Ticket t
+                JOIN Flight f ON f.flight_num = t.flight_num
+                WHERE t.ticket_id = NEW.ticket_id;
+
+                IF ticket_count = 0 THEN
+                    SIGNAL SQLSTATE '45000'
+                        SET MESSAGE_TEXT = 'Ticket does not exist for this purchase.';
+                END IF;
+
+                SELECT COUNT(*) INTO authorized_count
+                FROM AuthorizedBy
+                WHERE booking_agent_email = NEW.booking_agent_email
+                  AND airline_name = ticket_airline;
+
+                IF authorized_count = 0 THEN
+                    SIGNAL SQLSTATE '45000'
+                        SET MESSAGE_TEXT = 'This booking agent is not authorized to sell tickets for that airline.';
+                END IF;
+            END IF;
+        END
+        """,
+        """
+        CREATE TRIGGER enforce_agent_purchase_authorization_update
+        BEFORE UPDATE ON Purchases
+        FOR EACH ROW
+        BEGIN
+            DECLARE ticket_count INT DEFAULT 0;
+            DECLARE ticket_airline VARCHAR(50);
+            DECLARE authorized_count INT DEFAULT 0;
+
+            IF NEW.booking_agent_email IS NOT NULL THEN
+                SELECT COUNT(*), MAX(f.airline_name)
+                INTO ticket_count, ticket_airline
+                FROM Ticket t
+                JOIN Flight f ON f.flight_num = t.flight_num
+                WHERE t.ticket_id = NEW.ticket_id;
+
+                IF ticket_count = 0 THEN
+                    SIGNAL SQLSTATE '45000'
+                        SET MESSAGE_TEXT = 'Ticket does not exist for this purchase.';
+                END IF;
+
+                SELECT COUNT(*) INTO authorized_count
+                FROM AuthorizedBy
+                WHERE booking_agent_email = NEW.booking_agent_email
+                  AND airline_name = ticket_airline;
+
+                IF authorized_count = 0 THEN
+                    SIGNAL SQLSTATE '45000'
+                        SET MESSAGE_TEXT = 'This booking agent is not authorized to sell tickets for that airline.';
+                END IF;
+            END IF;
+        END
+        """,
+        """
         CREATE PROCEDURE purchase_ticket(
             IN p_flight_num VARCHAR(10),
             IN p_seat_class VARCHAR(20),
@@ -448,22 +514,34 @@ def init_database():
         f"""
         INSERT INTO Customer (email, name, password, city, phone_number, passport_number, passport_country, date_of_birth) VALUES
             ('alice@example.com', 'Alice Chen', '{sample_hash("password123", "alice")}', 'New York', '212-555-0101', 'P123456', 'USA', '1990-06-15'),
-            ('bob@example.com', 'Bob Li', '{sample_hash("password123", "bob")}', 'Shanghai', '86-21-5555-0102', 'P789012', 'China', '1985-03-22')
+            ('bob@example.com', 'Bob Li', '{sample_hash("password123", "bob")}', 'Shanghai', '86-21-5555-0102', 'P789012', 'China', '1985-03-22'),
+            ('charlie@example.com', 'Charlie Wang', '{sample_hash("password123", "charlie")}', 'Los Angeles', '310-555-0103', 'P345678', 'USA', '1992-08-20'),
+            ('diana@example.com', 'Diana Zhang', '{sample_hash("password123", "diana")}', 'London', '44-20-5555-0104', 'P901234', 'UK', '1988-11-10'),
+            ('edward@example.com', 'Edward Liu', '{sample_hash("password123", "edward")}', 'Tokyo', '81-3-5555-0105', 'P567890', 'Japan', '1995-02-14')
         """,
         f"""
         INSERT INTO BookingAgent (email, password) VALUES
-            ('agent1@travel.com', '{sample_hash("agentpass", "agent1")}')
+            ('agent1@travel.com', '{sample_hash("agentpass", "agent1")}'),
+            ('agent2@travel.com', '{sample_hash("agentpass", "agent2")}'),
+            ('agent3@travel.com', '{sample_hash("agentpass", "agent3")}'),
+            ('agent4@travel.com', '{sample_hash("agentpass", "agent4")}')
         """,
         f"""
         INSERT INTO AirlineStaff (username, airline_name, password, first_name, last_name, date_of_birth) VALUES
-            ('admin_skyjet', 'SkyJet', '{sample_hash("adminpass", "admin_skyjet")}', 'Avery', 'Admin', '1980-01-15'),
-            ('staff_skyjet', 'SkyJet', '{sample_hash("staffpass", "staff_skyjet")}', 'Sam', 'Staff', '1985-07-20')
+            ('SkyJet_admin', 'SkyJet', '{sample_hash("adminpass", "skyjet")}', 'Sky', 'Admin', '1980-01-15'),
+            ('SkyJet_staff', 'SkyJet', '{sample_hash("staffpass", "skyjet_staff")}', 'Sky', 'Staff', '1985-07-20'),
+            ('AirAsia_admin', 'AirAsia', '{sample_hash("adminpass", "airasia")}', 'Air', 'Admin', '1982-03-10'),
+            ('Delta_admin', 'Delta', '{sample_hash("adminpass", "delta")}', 'Delta', 'Admin', '1978-11-25')
         """,
         """
         INSERT INTO StaffPermission (username, permission) VALUES
-            ('admin_skyjet', 'admin'),
-            ('admin_skyjet', 'operator'),
-            ('staff_skyjet', 'operator')
+            ('SkyJet_admin', 'admin'),
+            ('SkyJet_admin', 'operator'),
+            ('SkyJet_staff', 'operator'),
+            ('AirAsia_admin', 'admin'),
+            ('AirAsia_admin', 'operator'),
+            ('Delta_admin', 'admin'),
+            ('Delta_admin', 'operator')
         """,
         """
         INSERT INTO Ticket (ticket_id, flight_num, seat_class, airplane_id, price_charged) VALUES
@@ -471,17 +549,84 @@ def init_database():
             (2, 'SJ101', 'business', 1, 448.50),
             (3, 'SJ102', 'economy', 1, 899.00),
             (4, 'DL301', 'business', 3, 825.00),
-            (5, 'SJ900', 'economy', 5, 199.00)
+            (5, 'SJ900', 'economy', 5, 199.00),
+            (6, 'SJ101', 'economy', 1, 299.00),
+            (7, 'SJ101', 'first', 1, 747.50),
+            (8, 'SJ102', 'business', 1, 1348.50),
+            (9, 'SJ103', 'economy', 4, 320.00),
+            (10, 'SJ103', 'business', 4, 480.00),
+            (11, 'AA201', 'economy', 2, 750.00),
+            (12, 'AA201', 'business', 2, 1125.00),
+            (13, 'AA202', 'economy', 2, 680.00),
+            (14, 'SJ101', 'economy', 1, 299.00),
+            (15, 'SJ101', 'business', 1, 448.50),
+            (16, 'SJ102', 'economy', 1, 899.00),
+            (17, 'SJ103', 'economy', 4, 320.00),
+            (18, 'AA201', 'economy', 2, 750.00),
+            (19, 'AA201', 'business', 2, 1125.00),
+            (20, 'SJ101', 'economy', 1, 299.00),
+            (21, 'SJ101', 'business', 1, 448.50),
+            (22, 'SJ102', 'economy', 1, 899.00),
+            (23, 'SJ103', 'business', 4, 480.00),
+            (24, 'AA202', 'economy', 2, 680.00),
+            (25, 'SJ101', 'economy', 1, 299.00),
+            (26, 'SJ101', 'first', 1, 747.50),
+            (27, 'SJ102', 'business', 1, 1348.50),
+            (28, 'AA201', 'economy', 2, 750.00),
+            (29, 'SJ103', 'economy', 4, 320.00),
+            (30, 'SJ101', 'business', 1, 448.50),
+            (31, 'SJ102', 'economy', 1, 899.00),
+            (32, 'AA201', 'business', 2, 1125.00),
+            (33, 'SJ103', 'economy', 4, 320.00),
+            (34, 'AA202', 'economy', 2, 680.00),
+            (35, 'SJ101', 'economy', 1, 299.00)
+        """,
+        """
+        INSERT INTO AuthorizedBy (booking_agent_email, airline_name) VALUES
+            ('agent1@travel.com', 'SkyJet'),
+            ('agent2@travel.com', 'SkyJet'),
+            ('agent3@travel.com', 'SkyJet'),
+            ('agent4@travel.com', 'SkyJet'),
+            ('agent2@travel.com', 'AirAsia')
         """,
         """
         INSERT INTO Purchases (ticket_id, customer_email, booking_agent_email, purchase_date) VALUES
-            (1, 'alice@example.com', NULL, '2026-03-01'),
-            (2, 'bob@example.com', 'agent1@travel.com', '2026-03-05'),
-            (3, 'alice@example.com', NULL, '2026-03-10'),
-            (4, 'bob@example.com', NULL, '2026-03-15'),
-            (5, 'alice@example.com', NULL, '2026-04-25')
+            (1, 'alice@example.com', NULL, '2026-01-15'),
+            (2, 'bob@example.com', 'agent1@travel.com', '2026-01-20'),
+            (3, 'charlie@example.com', 'agent2@travel.com', '2026-02-05'),
+            (4, 'diana@example.com', NULL, '2026-02-10'),
+            (5, 'edward@example.com', 'agent3@travel.com', '2026-02-15'),
+            (6, 'alice@example.com', 'agent1@travel.com', '2026-03-01'),
+            (7, 'bob@example.com', 'agent1@travel.com', '2026-03-05'),
+            (8, 'charlie@example.com', 'agent2@travel.com', '2026-03-10'),
+            (9, 'diana@example.com', 'agent3@travel.com', '2026-03-12'),
+            (10, 'edward@example.com', 'agent4@travel.com', '2026-03-15'),
+            (11, 'alice@example.com', 'agent2@travel.com', '2026-04-01'),
+            (12, 'bob@example.com', 'agent2@travel.com', '2026-04-05'),
+            (13, 'charlie@example.com', 'agent2@travel.com', '2026-04-10'),
+            (14, 'diana@example.com', 'agent3@travel.com', '2026-04-12'),
+            (15, 'edward@example.com', 'agent4@travel.com', '2026-04-15'),
+            (16, 'alice@example.com', 'agent1@travel.com', '2026-04-20'),
+            (17, 'bob@example.com', 'agent1@travel.com', '2026-04-22'),
+            (18, 'charlie@example.com', 'agent2@travel.com', '2026-04-25'),
+            (19, 'diana@example.com', NULL, '2026-04-28'),
+            (20, 'edward@example.com', 'agent3@travel.com', '2026-04-30'),
+            (21, 'alice@example.com', 'agent1@travel.com', '2026-05-01'),
+            (22, 'bob@example.com', 'agent1@travel.com', '2026-05-02'),
+            (23, 'charlie@example.com', 'agent2@travel.com', '2026-05-03'),
+            (24, 'diana@example.com', 'agent2@travel.com', '2026-05-04'),
+            (25, 'edward@example.com', 'agent4@travel.com', '2026-05-05'),
+            (26, 'alice@example.com', 'agent1@travel.com', '2026-05-06'),
+            (27, 'bob@example.com', 'agent2@travel.com', '2026-05-07'),
+            (28, 'charlie@example.com', 'agent2@travel.com', '2026-05-08'),
+            (29, 'diana@example.com', 'agent3@travel.com', '2026-05-09'),
+            (30, 'edward@example.com', 'agent1@travel.com', '2026-05-10'),
+            (31, 'alice@example.com', 'agent1@travel.com', '2026-05-11'),
+            (32, 'bob@example.com', 'agent2@travel.com', '2026-05-12'),
+            (33, 'charlie@example.com', 'agent3@travel.com', '2026-05-13'),
+            (34, 'diana@example.com', NULL, '2026-05-14'),
+            (35, 'edward@example.com', 'agent4@travel.com', '2026-05-15')
         """,
-        "INSERT INTO AuthorizedBy (booking_agent_email, airline_name) VALUES ('agent1@travel.com', 'SkyJet')",
     ]
 
     for statement in sample_statements:
@@ -492,12 +637,20 @@ def init_database():
     conn.close()
 
     print("Database initialized successfully.")
-    print("Demo logins:")
-    print("  Customer: alice@example.com / password123")
-    print("  Customer: bob@example.com / password123")
-    print("  Booking agent: agent1@travel.com / agentpass")
-    print("  Admin staff: admin_skyjet / adminpass")
-    print("  Regular staff: staff_skyjet / staffpass")
+    print("\nDemo logins:")
+    print("  Customers:")
+    print("    - alice@example.com / password123")
+    print("    - bob@example.com / password123")
+    print("    - charlie@example.com / password123")
+    print("  Booking Agents:")
+    print("    - agent1@travel.com / agentpass")
+    print("    - agent2@travel.com / agentpass")
+    print("  Airline Staff (Admin):")
+    print("    - SkyJet_admin / adminpass")
+    print("    - AirAsia_admin / adminpass")
+    print("    - Delta_admin / adminpass")
+    print("  Airline Staff (Operator):")
+    print("    - SkyJet_staff / staffpass")
 
 
 if __name__ == "__main__":

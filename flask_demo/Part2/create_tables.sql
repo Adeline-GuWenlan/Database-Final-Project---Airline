@@ -264,6 +264,72 @@ BEGIN
     END IF;
 END//
 
+CREATE TRIGGER enforce_agent_purchase_authorization_insert
+BEFORE INSERT ON Purchases
+FOR EACH ROW
+BEGIN
+    DECLARE ticket_count INT DEFAULT 0;
+    DECLARE ticket_airline VARCHAR(50);
+    DECLARE authorized_count INT DEFAULT 0;
+
+    IF NEW.booking_agent_email IS NOT NULL THEN
+        SELECT COUNT(*), MAX(f.airline_name)
+        INTO ticket_count, ticket_airline
+        FROM Ticket t
+        JOIN Flight f ON f.flight_num = t.flight_num
+        WHERE t.ticket_id = NEW.ticket_id;
+
+        IF ticket_count = 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Ticket does not exist for this purchase.';
+        END IF;
+
+        SELECT COUNT(*)
+        INTO authorized_count
+        FROM AuthorizedBy
+        WHERE booking_agent_email = NEW.booking_agent_email
+          AND airline_name = ticket_airline;
+
+        IF authorized_count = 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'This booking agent is not authorized to sell tickets for that airline.';
+        END IF;
+    END IF;
+END//
+
+CREATE TRIGGER enforce_agent_purchase_authorization_update
+BEFORE UPDATE ON Purchases
+FOR EACH ROW
+BEGIN
+    DECLARE ticket_count INT DEFAULT 0;
+    DECLARE ticket_airline VARCHAR(50);
+    DECLARE authorized_count INT DEFAULT 0;
+
+    IF NEW.booking_agent_email IS NOT NULL THEN
+        SELECT COUNT(*), MAX(f.airline_name)
+        INTO ticket_count, ticket_airline
+        FROM Ticket t
+        JOIN Flight f ON f.flight_num = t.flight_num
+        WHERE t.ticket_id = NEW.ticket_id;
+
+        IF ticket_count = 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Ticket does not exist for this purchase.';
+        END IF;
+
+        SELECT COUNT(*)
+        INTO authorized_count
+        FROM AuthorizedBy
+        WHERE booking_agent_email = NEW.booking_agent_email
+          AND airline_name = ticket_airline;
+
+        IF authorized_count = 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'This booking agent is not authorized to sell tickets for that airline.';
+        END IF;
+    END IF;
+END//
+
 CREATE PROCEDURE purchase_ticket(
     IN p_flight_num VARCHAR(10),
     IN p_seat_class VARCHAR(20),

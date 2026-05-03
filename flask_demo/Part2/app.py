@@ -3,7 +3,7 @@ import re
 import hashlib
 import hmac
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from pathlib import Path
@@ -17,6 +17,8 @@ PASSWORD_MIN_LENGTH = 8
 COMMISSION_RATE = Decimal("0.10")
 CSRF_FIELD_NAME = "_csrf_token"
 CSRF_SESSION_KEY = "_csrf_token"
+SESSION_TIMEOUT = timedelta(hours=2)
+SESSION_CREATED_AT_KEY = "_session_created_at"
 PRICE_MULTIPLIERS = {
     "economy": Decimal("1.00"),
     "business": Decimal("1.50"),
@@ -25,6 +27,45 @@ PRICE_MULTIPLIERS = {
 STAFF_PERMISSIONS = ("admin", "operator")
 FLIGHT_STATUSES = ("upcoming", "in-progress", "delayed")
 DEFAULT_XAMPP_SOCKET = Path("/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock")
+PASSWORD_TABLE_KEYS = {
+    "Customer": "email",
+    "BookingAgent": "email",
+    "AirlineStaff": "username",
+}
+ROLE_SESSION_KEYS = {
+    "customer": ("identity", "display_name", "customer_email"),
+    "booking_agent": ("identity", "display_name", "agent_email", "authorized_airlines"),
+    "airline_staff": ("identity", "display_name", "airline_name", "permissions"),
+}
+PROTECTED_ENDPOINTS = {
+    "home",
+    "book_ticket",
+    "customer_portal",
+    "my_purchases",
+    "save_flight",
+    "saved_flights",
+    "remove_saved_flight",
+    "agent_portal",
+    "staff_portal",
+    "add_airport",
+    "add_airplane",
+    "add_flight",
+    "authorize_agent",
+    "update_flight_status",
+    "cancel_booking",
+}
+TOP_AGENT_PERIOD_FILTERS = {
+    "current_month": "YEAR(p.purchase_date) = YEAR(CURDATE()) AND MONTH(p.purchase_date) = MONTH(CURDATE())",
+    "current_year": "YEAR(p.purchase_date) = YEAR(CURDATE())",
+}
+TOP_AGENT_ORDER_CLAUSES = {
+    "tickets": "tickets_sold DESC, commission_total DESC, p.booking_agent_email",
+    "commission": "commission_total DESC, tickets_sold DESC, p.booking_agent_email",
+}
+TOP_DESTINATION_INTERVALS = {
+    "three_months": "3 MONTH",
+    "one_year": "1 YEAR",
+}
 
 
 app = Flask(__name__)
@@ -32,8 +73,48 @@ app.config.update(
     SECRET_KEY=os.getenv("FLASK_SECRET_KEY", "change-this-before-demo"),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=2),
+    PERMANENT_SESSION_LIFETIME=SESSION_TIMEOUT,
+    SESSION_REFRESH_EACH_REQUEST=False,
 )
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def read_session_created_at():
+    created_at = session.get(SESSION_CREATED_AT_KEY)
+    if not created_at:
+        return None
+    try:
+        parsed = datetime.fromisoformat(created_at)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def session_is_expired():
+    if "role" not in session:
+        return False
+    created_at = read_session_created_at()
+    return not created_at or utc_now() - created_at > SESSION_TIMEOUT
+
+
+def session_has_role_context(role=None):
+    role = role or session.get("role")
+    required_keys = ROLE_SESSION_KEYS.get(role)
+    if not required_keys:
+        return False
+    return all(key in session for key in required_keys)
+
+
+def redirect_to_login(message="Please sign in to continue."):
+    session.clear()
+    flash(message, "error")
+    return redirect(url_for("login"))
+
 
 def build_db_config():
     config = {
@@ -77,6 +158,25 @@ def protect_post_requests():
     if not expected or not hmac.compare_digest(expected, submitted):
         abort(400)
     return None
+
+
+@app.before_request
+def expire_authenticated_sessions():
+    if session_is_expired():
+        session.clear()
+        if request.endpoint in PROTECTED_ENDPOINTS:
+            flash("Your session expired. Please sign in again.", "error")
+            return redirect(url_for("login"))
+    return None
+
+
+@app.after_request
+def disable_private_page_caching(response):
+    if "role" in session or request.endpoint in PROTECTED_ENDPOINTS:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 def dict_cursor(connection):
@@ -255,12 +355,14 @@ def hash_password(password):
 
 
 def maybe_upgrade_password(cursor, table_name, key_column, key_value, stored_password, provided_password):
+    if PASSWORD_TABLE_KEYS.get(table_name) != key_column:
+        raise ValueError("Password upgrade target is not allowed.")
     if is_password_hash(stored_password):
         return
     if stored_password != provided_password:
         return
     cursor.execute(
-        f"UPDATE {table_name} SET password = %s WHERE {key_column} = %s",
+        f"UPDATE `{table_name}` SET password = %s WHERE `{key_column}` = %s",
         (hash_password(provided_password), key_value),
     )
 
@@ -309,6 +411,7 @@ def calculate_ticket_price(base_price, seat_class):
 def login_user(role, identity, display_name, **extras):
     session.clear()
     session.permanent = True
+    session[SESSION_CREATED_AT_KEY] = utc_now().isoformat()
     session["role"] = role
     session["identity"] = identity
     session["display_name"] = display_name
@@ -317,15 +420,17 @@ def login_user(role, identity, display_name, **extras):
 
 
 def current_role():
-    return session.get("role")
+    role = session.get("role")
+    if not role or not session_has_role_context(role):
+        return None
+    return role
 
 
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
-        if "role" not in session:
-            flash("Please sign in to continue.", "error")
-            return redirect(url_for("login"))
+        if "role" not in session or not session_has_role_context():
+            return redirect_to_login()
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -335,10 +440,10 @@ def roles_required(*roles):
     def decorator(view):
         @wraps(view)
         def wrapped_view(*args, **kwargs):
-            if "role" not in session:
-                flash("Please sign in to continue.", "error")
-                return redirect(url_for("login"))
-            if session.get("role") not in roles:
+            if "role" not in session or not session_has_role_context():
+                return redirect_to_login()
+            role = session.get("role")
+            if role not in roles:
                 abort(403)
             return view(*args, **kwargs)
 
@@ -351,9 +456,8 @@ def permission_required(permission):
     def decorator(view):
         @wraps(view)
         def wrapped_view(*args, **kwargs):
-            if "role" not in session:
-                flash("Please sign in to continue.", "error")
-                return redirect(url_for("login"))
+            if "role" not in session or not session_has_role_context():
+                return redirect_to_login()
             if session.get("role") != "airline_staff" or permission not in session.get("permissions", []):
                 abort(403)
             return view(*args, **kwargs)
@@ -412,6 +516,8 @@ def collect_flight_filters(values, cursor=None):
 
     if filters["departure_date"]:
         parse_date_value(filters["departure_date"], "Departure date")
+    if filters["status"] and filters["status"] not in FLIGHT_STATUSES:
+        raise ValueError("Please choose a valid flight status.")
     if filters["departure_airport"] and filters["arrival_airport"] and filters["departure_airport"] == filters["arrival_airport"]:
         raise ValueError("Departure and arrival airports cannot be the same.")
 
@@ -582,6 +688,10 @@ def get_agent_analytics(cursor, agent_email):
             COALESCE(AVG(t.price_charged * %s), 0) AS avg_commission
         FROM Purchases p
         JOIN Ticket t ON t.ticket_id = p.ticket_id
+        JOIN Flight f ON f.flight_num = t.flight_num
+        JOIN AuthorizedBy ab
+          ON ab.booking_agent_email = p.booking_agent_email
+         AND ab.airline_name = f.airline_name
         WHERE p.booking_agent_email = %s
           AND p.purchase_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
     """
@@ -594,6 +704,11 @@ def get_agent_analytics(cursor, agent_email):
             c.name,
             COUNT(*) AS tickets_sold
         FROM Purchases p
+        JOIN Ticket t ON t.ticket_id = p.ticket_id
+        JOIN Flight f ON f.flight_num = t.flight_num
+        JOIN AuthorizedBy ab
+          ON ab.booking_agent_email = p.booking_agent_email
+         AND ab.airline_name = f.airline_name
         JOIN Customer c ON c.email = p.customer_email
         WHERE p.booking_agent_email = %s
           AND p.purchase_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
@@ -608,6 +723,10 @@ def get_agent_analytics(cursor, agent_email):
             COALESCE(SUM(t.price_charged * %s), 0) AS commission_total
         FROM Purchases p
         JOIN Ticket t ON t.ticket_id = p.ticket_id
+        JOIN Flight f ON f.flight_num = t.flight_num
+        JOIN AuthorizedBy ab
+          ON ab.booking_agent_email = p.booking_agent_email
+         AND ab.airline_name = f.airline_name
         JOIN Customer c ON c.email = p.customer_email
         WHERE p.booking_agent_email = %s
           AND p.purchase_date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
@@ -646,8 +765,11 @@ def get_staff_analytics(cursor, airline_name):
         LIMIT 5
     """
 
-    def run_top_agents(period_filter, order_clause):
-        query = top_agents_base.format(period_filter=period_filter, order_clause=order_clause)
+    def run_top_agents(period_key, order_key):
+        query = top_agents_base.format(
+            period_filter=TOP_AGENT_PERIOD_FILTERS[period_key],
+            order_clause=TOP_AGENT_ORDER_CLAUSES[order_key],
+        )
         cursor.execute(query, (float(COMMISSION_RATE), airline_name))
         return cursor.fetchall()
 
@@ -711,27 +833,33 @@ def get_staff_analytics(cursor, airline_name):
     cursor.execute(delay_stats_query, (airline_name,))
     delay_stats = cursor.fetchone()
 
-    cursor.execute(top_destinations_query.format(interval_expression="3 MONTH"), (airline_name,))
+    cursor.execute(
+        top_destinations_query.format(interval_expression=TOP_DESTINATION_INTERVALS["three_months"]),
+        (airline_name,),
+    )
     top_destinations_3m = cursor.fetchall()
-    cursor.execute(top_destinations_query.format(interval_expression="1 YEAR"), (airline_name,))
+    cursor.execute(
+        top_destinations_query.format(interval_expression=TOP_DESTINATION_INTERVALS["one_year"]),
+        (airline_name,),
+    )
     top_destinations_1y = cursor.fetchall()
 
     return {
         "month_by_tickets": run_top_agents(
-            "YEAR(p.purchase_date) = YEAR(CURDATE()) AND MONTH(p.purchase_date) = MONTH(CURDATE())",
-            "tickets_sold DESC, commission_total DESC, p.booking_agent_email",
+            "current_month",
+            "tickets",
         ),
         "month_by_commission": run_top_agents(
-            "YEAR(p.purchase_date) = YEAR(CURDATE()) AND MONTH(p.purchase_date) = MONTH(CURDATE())",
-            "commission_total DESC, tickets_sold DESC, p.booking_agent_email",
+            "current_month",
+            "commission",
         ),
         "year_by_tickets": run_top_agents(
-            "YEAR(p.purchase_date) = YEAR(CURDATE())",
-            "tickets_sold DESC, commission_total DESC, p.booking_agent_email",
+            "current_year",
+            "tickets",
         ),
         "year_by_commission": run_top_agents(
-            "YEAR(p.purchase_date) = YEAR(CURDATE())",
-            "commission_total DESC, tickets_sold DESC, p.booking_agent_email",
+            "current_year",
+            "commission",
         ),
         "most_frequent_customer": most_frequent_customer,
         "tickets_per_month": tickets_per_month,
@@ -1468,6 +1596,9 @@ def agent_portal():
             FROM Purchases p
             JOIN Ticket t ON t.ticket_id = p.ticket_id
             JOIN Flight f ON f.flight_num = t.flight_num
+            JOIN AuthorizedBy ab
+              ON ab.booking_agent_email = p.booking_agent_email
+             AND ab.airline_name = f.airline_name
             JOIN Airport dep ON dep.name = f.departure_airport
             JOIN Airport arr ON arr.name = f.arrival_airport
             WHERE p.booking_agent_email = %s

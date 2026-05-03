@@ -271,6 +271,9 @@ SELECT
 FROM Purchases p
 JOIN Ticket t ON t.ticket_id = p.ticket_id
 JOIN Flight f ON f.flight_num = t.flight_num
+JOIN AuthorizedBy ab
+  ON ab.booking_agent_email = p.booking_agent_email
+ AND ab.airline_name = f.airline_name
 JOIN Airport dep ON dep.name = f.departure_airport
 JOIN Airport arr ON arr.name = f.arrival_airport
 WHERE p.booking_agent_email = %s
@@ -290,12 +293,21 @@ SELECT
     COALESCE(AVG(t.price_charged * 0.10), 0) AS avg_commission
 FROM Purchases p
 JOIN Ticket t ON t.ticket_id = p.ticket_id
+JOIN Flight f ON f.flight_num = t.flight_num
+JOIN AuthorizedBy ab
+  ON ab.booking_agent_email = p.booking_agent_email
+ AND ab.airline_name = f.airline_name
 WHERE p.booking_agent_email = %s
   AND p.purchase_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
 
 -- Top customers by tickets (last 6 months)
 SELECT p.customer_email, c.name, COUNT(*) AS tickets_sold
 FROM Purchases p
+JOIN Ticket t ON t.ticket_id = p.ticket_id
+JOIN Flight f ON f.flight_num = t.flight_num
+JOIN AuthorizedBy ab
+  ON ab.booking_agent_email = p.booking_agent_email
+ AND ab.airline_name = f.airline_name
 JOIN Customer c ON c.email = p.customer_email
 WHERE p.booking_agent_email = %s
   AND p.purchase_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
@@ -307,6 +319,10 @@ LIMIT 5
 SELECT p.customer_email, c.name, COALESCE(SUM(t.price_charged * 0.10), 0) AS commission_total
 FROM Purchases p
 JOIN Ticket t ON t.ticket_id = p.ticket_id
+JOIN Flight f ON f.flight_num = t.flight_num
+JOIN AuthorizedBy ab
+  ON ab.booking_agent_email = p.booking_agent_email
+ AND ab.airline_name = f.airline_name
 JOIN Customer c ON c.email = p.customer_email
 WHERE p.booking_agent_email = %s
   AND p.purchase_date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
@@ -579,6 +595,11 @@ UPDATE Flight SET status = %s WHERE flight_num = %s
 - Prevents overbooking by checking: `booked_count < seat_capacity`
 - Runs on INSERT of Ticket table
 
+#### Agent Purchase Authorization (`enforce_agent_purchase_authorization_insert`, `enforce_agent_purchase_authorization_update`)
+- Validates direct `Purchases` inserts/updates against `AuthorizedBy`
+- Allows direct customer purchases where `booking_agent_email` is `NULL`
+- Prevents seeded or manually inserted agent sales for unauthorized airlines
+
 ### 2. Stored Procedure for Complex Transactions
 
 #### `purchase_ticket()` Procedure
@@ -691,7 +712,8 @@ permission VARCHAR(20) NOT NULL CHECK (permission IN ('admin', 'operator'))
 
 ### 3. SQL Injection Prevention
 - **Parameterized queries**: All user input passed as parameters (`%s`), never string concatenation
-- **Prepared statements**: MySQL connector uses prepared statements automatically
+- **Prepared-statement style binding**: MySQL connector binds values separately from SQL text
+- **Allowlisted SQL fragments**: Dynamic table names, analytics periods, and sort clauses come from server constants
 - **Input validation**: Whitelisting of flight statuses, seat classes, etc.
 
 ### 4. Authorization Checks
@@ -703,8 +725,10 @@ permission VARCHAR(20) NOT NULL CHECK (permission IN ('admin', 'operator'))
 ### 5. Session Security
 - HTTP-only cookies (JavaScript cannot access)
 - SameSite=Lax (CSRF protection)
-- 2-hour expiration (PERMANENT_SESSION_LIFETIME)
+- Role-specific identity fields required on protected requests
+- Absolute 2-hour expiration (`PERMANENT_SESSION_LIFETIME`, `_session_created_at`, and `SESSION_REFRESH_EACH_REQUEST=False`)
 - Session cleared on logout
+- No-store cache headers on authenticated/protected responses
 
 ---
 
@@ -773,6 +797,7 @@ SELECT ... FROM ... WHERE ... FOR UPDATE
 
 ### 3. Authorization
 - Booking agent `agent1@travel.com` is authorized for SkyJet only
+- Booking agent `agent2@travel.com` is authorized for SkyJet and AirAsia
 - Try to book AirAsia flight → fails with "not authorized" error
 
 ### 4. Cascade Delete
@@ -798,7 +823,7 @@ SELECT ... FROM ... WHERE ... FOR UPDATE
 8. **Stored procedure** in action (booking confirmation message mentions it)
 
 ### Talk About These Database Features
-1. **Triggers** preventing invalid data (mention flight validation, capacity enforcement)
+1. **Triggers** preventing invalid data (mention flight validation, capacity enforcement, agent authorization)
 2. **Stored procedure** handling complex booking logic atomically
 3. **Indexes** making searches fast (demonstrate search speed)
 4. **Foreign key cascades** maintaining referential integrity
@@ -814,9 +839,13 @@ SELECT ... FROM ... WHERE ... FOR UPDATE
 |------|---------------|----------|---------|-------------|
 | Customer | alice@example.com | password123 | - | - |
 | Customer | bob@example.com | password123 | - | - |
+| Customer | charlie@example.com | password123 | - | - |
 | Booking Agent | agent1@travel.com | agentpass | SkyJet (authorized) | - |
-| Admin Staff | admin_skyjet | adminpass | SkyJet | admin, operator |
-| Regular Staff | staff_skyjet | staffpass | SkyJet | operator |
+| Booking Agent | agent2@travel.com | agentpass | SkyJet, AirAsia | - |
+| Admin Staff | SkyJet_admin | adminpass | SkyJet | admin, operator |
+| Admin Staff | AirAsia_admin | adminpass | AirAsia | admin, operator |
+| Admin Staff | Delta_admin | adminpass | Delta | admin, operator |
+| Regular Staff | SkyJet_staff | staffpass | SkyJet | operator |
 
 ---
 

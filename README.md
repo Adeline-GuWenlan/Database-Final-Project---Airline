@@ -8,7 +8,6 @@ The primary deliverable is the refined Part 3 web application in `flask_demo/Par
 
 - `flask_demo/Part2/`: main airline reservation system application
 - `flask_demo/init_db.py`: shared database initializer used by the app setup flow
-- `flask_demo/example1`, `flask_demo/example2`, `flask_demo/example3`: smaller Flask examples kept for reference
 - `Readme_HumanFacing.txt`: original short setup notes from the workspace
 - `Syllabus and Rubrix.txt`: project requirements and grading notes
 - `AgentPrompt.txt`: project planning / optimization prompt used during development

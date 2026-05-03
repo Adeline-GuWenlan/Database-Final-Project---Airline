@@ -81,12 +81,12 @@ INSERT INTO Ticket (ticket_id, flight_num, seat_class, airplane_id, price_charge
     (4, 'DL301', 'business', 3, 825.00),
     (5, 'SJ900', 'economy', 5, 199.00);
 
+INSERT INTO AuthorizedBy (booking_agent_email, airline_name) VALUES
+    ('agent1@travel.com', 'SkyJet');
+
 INSERT INTO Purchases (ticket_id, customer_email, booking_agent_email, purchase_date) VALUES
     (1, 'alice@example.com', NULL, '2026-03-01'),
     (2, 'bob@example.com', 'agent1@travel.com', '2026-03-05'),
     (3, 'alice@example.com', NULL, '2026-03-10'),
     (4, 'bob@example.com', NULL, '2026-03-15'),
     (5, 'alice@example.com', NULL, '2026-04-25');
-
-INSERT INTO AuthorizedBy (booking_agent_email, airline_name) VALUES
-    ('agent1@travel.com', 'SkyJet');

@@ -5,9 +5,9 @@ This Flask + MySQL project refines the airline reservation prototype so it align
 ## What Changed
 
 - Unified authentication for `customer`, `booking_agent`, and `airline_staff`
-- Session-backed role routing and protected requests
+- Session-backed role routing, role-specific authorization, and two-hour session expiry
 - Password hashing with PBKDF2-SHA256 instead of plain-text storage
-- CSRF protection for state-changing forms and explicit session-cookie clearing on logout
+- CSRF protection, private-page no-store headers, and explicit session-cookie clearing on logout
 - Structured public flight search and public in-progress flight status lookup
 - Customer dashboard with filtered trips and spending analytics
 - Booking-agent dashboard with authorization checks and commission analytics
@@ -60,16 +60,20 @@ http://127.0.0.1:5000
 
 - Customer: `alice@example.com` / `password123`
 - Customer: `bob@example.com` / `password123`
+- Customer: `charlie@example.com` / `password123`
 - Booking agent: `agent1@travel.com` / `agentpass`
-- Admin staff: `admin_skyjet` / `adminpass`
-- Regular staff: `staff_skyjet` / `staffpass`
+- Booking agent: `agent2@travel.com` / `agentpass`
+- Admin staff: `SkyJet_admin` / `adminpass`
+- Admin staff: `AirAsia_admin` / `adminpass`
+- Admin staff: `Delta_admin` / `adminpass`
+- Regular staff: `SkyJet_staff` / `staffpass`
 
 ## Demo Coverage
 
 - Register a customer or booking-agent account and log in
 - Log out and verify protected dashboards redirect to login
-- Show `staff_skyjet` cannot create airports because the account has only `operator`
-- Show `admin_skyjet` can add airports, airplanes, flights, and agent authorizations
+- Show `SkyJet_staff` cannot create airports because the account has only `operator`
+- Show `SkyJet_admin` can add airports, airplanes, flights, and agent authorizations
 - Purchase tickets as a customer or as `agent1@travel.com`
 - Search `SJ900` to show a sold-out flight and the ticket-limit check
 

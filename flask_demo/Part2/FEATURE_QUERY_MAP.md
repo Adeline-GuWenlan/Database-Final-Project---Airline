@@ -26,12 +26,12 @@ This document maps each major user-facing feature to the database queries or que
 
 | Feature | Main Tables | Query Pattern |
 | --- | --- | --- |
-| View sold tickets by customer | `Purchases`, `Ticket`, `Flight`, `Airport` | `SELECT` joined purchase history filtered by `booking_agent_email`, date range, and route |
+| View sold tickets by customer | `Purchases`, `Ticket`, `Flight`, `Airport`, `AuthorizedBy` | `SELECT` joined purchase history filtered by the logged-in `booking_agent_email`, current airline authorization, date range, and route |
 | Restrict searchable flights to authorized airlines | `AuthorizedBy`, `Flight` | Authorized airline list loaded into session, then used as a server-side filter on flight search |
 | Book on behalf of a customer | `AuthorizedBy`, `Customer`, `Flight`, `SeatClass`, `Ticket`, `Purchases` | Transaction calls stored procedure `purchase_ticket`, which verifies agent-airline authorization, validates customer email, locks inventory rows, and inserts ticket + purchase |
-| 30-day commission analytics | `Purchases`, `Ticket` | `COUNT`, `SUM`, and `AVG` over recent agent-issued purchases using a fixed commission rate |
-| Top customers by tickets | `Purchases`, `Customer` | `GROUP BY customer_email` and `COUNT(*)` over last 6 months |
-| Top customers by commission | `Purchases`, `Ticket`, `Customer` | `GROUP BY customer_email` and `SUM(price_charged * 0.10)` over last year |
+| 30-day commission analytics | `Purchases`, `Ticket`, `Flight`, `AuthorizedBy` | `COUNT`, `SUM`, and `AVG` over recent authorized agent-issued purchases using a fixed commission rate |
+| Top customers by tickets | `Purchases`, `Ticket`, `Flight`, `Customer`, `AuthorizedBy` | `GROUP BY customer_email` and `COUNT(*)` over last 6 months for the logged-in agent's authorized airlines |
+| Top customers by commission | `Purchases`, `Ticket`, `Flight`, `Customer`, `AuthorizedBy` | `GROUP BY customer_email` and `SUM(price_charged * 0.10)` over last year for the logged-in agent's authorized airlines |
 
 ## Airline Staff
 
